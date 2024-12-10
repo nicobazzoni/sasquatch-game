@@ -23,7 +23,8 @@ const BigFoot = ({ url, position, scale, action }) => {
 
   return (
     <group ref={group} position={position} scale={scale}>
-      <primitive object={scene} />
+      <primitive object={scene} scale={[2, 2, 2]} // Adjust the size
+             />
     </group>
   );
 };

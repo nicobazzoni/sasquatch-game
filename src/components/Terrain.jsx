@@ -7,8 +7,8 @@ const Terrain = () => {
     return (
         <primitive
             object={scene}
-            scale={[10, 10, 10]} // Adjust the size
-            position={[0, -1, 0]} // Position the terrain
+            scale={[20, 20, 20]} // Adjust the size
+            position={[0, 0, 0]} // Position the terrain
         />
     );
 };
