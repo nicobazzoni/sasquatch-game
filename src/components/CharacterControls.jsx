@@ -31,65 +31,67 @@ export class CharacterControls {
     }
   
     update(delta, keysPressed) {
-      const directionPressed = ["w", "a", "s", "d"].some(
-        (key) => keysPressed[key] === true
-      );
-  
-      let play = "";
-      if (keysPressed["t"]) {
-        play = "throw";
-      } else if (directionPressed && this.toggleRun) {
-        play = "run";
-      } else if (directionPressed) {
-        play = "walk";
-      } else {
-        play = "idle";
-      }
-  
-      if (this.currentAction !== play) {
-        console.log(`Switching animation from ${this.currentAction} to ${play}`);
-        const toPlay = this.animationsMap.get(play);
-        const current = this.animationsMap.get(this.currentAction);
-  
-        if (current) current.fadeOut(this.fadeDuration);
-        if (toPlay) toPlay.reset().fadeIn(this.fadeDuration).play();
-  
-        this.currentAction = play;
-      }
-  
-      this.mixer.update(delta);
-  
-      if (this.currentAction === "run" || this.currentAction === "walk") {
-        const angleYCameraDirection = Math.atan2(
-          this.camera.position.x - this.model.position.x,
-          this.camera.position.z - this.model.position.z
+        const directionPressed = ["w", "a", "s", "d"].some(
+          (key) => keysPressed[key] === true
         );
-  
-        const directionOffset = this.directionOffset(keysPressed);
-  
-        this.rotateQuaternion.setFromAxisAngle(
-          this.rotateAngle,
-          angleYCameraDirection + directionOffset
-        );
-        this.model.quaternion.rotateTowards(this.rotateQuaternion, 0.2);
-  
-        this.camera.getWorldDirection(this.walkDirection);
-        this.walkDirection.y = 0;
-        this.walkDirection.normalize();
-        this.walkDirection.applyAxisAngle(this.rotateAngle, directionOffset);
-  
-        const velocity =
-          this.currentAction === "run" ? this.runVelocity : this.walkVelocity;
-  
-        const moveX = this.walkDirection.x * velocity * delta;
-        const moveZ = this.walkDirection.z * velocity * delta;
-        this.model.position.x += moveX;
-        this.model.position.z += moveZ;
-  
-        this.updateCameraTarget(moveX, moveZ);
+      
+        let play = "";
+        if (keysPressed["t"]) {
+          play = "throw"; // Throw animation when 't' is pressed
+        } else if (directionPressed && keysPressed["shift"]) {
+          play = "run"; // Run when direction keys + Shift are pressed
+        } else if (directionPressed) {
+          play = "walk"; // Walk when only direction keys are pressed
+        } else {
+          play = "idle"; // Idle when no keys are pressed
+        }
+      
+        // Switch animation if needed
+        if (this.currentAction !== play) {
+          console.log(`Switching animation from ${this.currentAction} to ${play}`);
+          const toPlay = this.animationsMap.get(play);
+          const current = this.animationsMap.get(this.currentAction);
+      
+          if (current) current.fadeOut(this.fadeDuration);
+          if (toPlay) toPlay.reset().fadeIn(this.fadeDuration).play();
+      
+          this.currentAction = play;
+        }
+      
+        this.mixer.update(delta);
+      
+        if (this.currentAction === "run" || this.currentAction === "walk") {
+          const angleYCameraDirection = Math.atan2(
+            this.camera.position.x - this.model.position.x,
+            this.camera.position.z - this.model.position.z
+          );
+      
+          const directionOffset = this.directionOffset(keysPressed);
+      
+          this.rotateQuaternion.setFromAxisAngle(
+            this.rotateAngle,
+            angleYCameraDirection + directionOffset
+          );
+          this.model.quaternion.rotateTowards(this.rotateQuaternion, 0.2);
+      
+          this.camera.getWorldDirection(this.walkDirection);
+          this.walkDirection.y = 0;
+          this.walkDirection.normalize();
+          this.walkDirection.applyAxisAngle(this.rotateAngle, directionOffset);
+      
+          // Determine velocity based on the current action
+          const velocity =
+            this.currentAction === "run" ? this.runVelocity : this.walkVelocity;
+      
+          // Move model & update camera target
+          const moveX = this.walkDirection.x * velocity * delta;
+          const moveZ = this.walkDirection.z * velocity * delta;
+          this.model.position.x += moveX;
+          this.model.position.z += moveZ;
+      
+          this.updateCameraTarget(moveX, moveZ);
+        }
       }
-    }
-  
     updateCameraTarget(moveX, moveZ) {
       this.camera.position.x += moveX;
       this.camera.position.z += moveZ;
