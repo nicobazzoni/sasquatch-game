@@ -1,61 +1,74 @@
-
-import { useRef, useEffect} from "react";
+import * as THREE from "three";
+import { useRef, useEffect } from "react";
 import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import * as THREE from 'three'
-const Avatar = ({ position, attackPosition }) => {
-    const avatarRef = useRef();
-    const { scene, animations } = useGLTF("https://storage.googleapis.com/new-music/ultimate_monsters_pack.glb");
-    const mixer = useRef(null);
-    const actions = useRef({});
-    const visionRadius = 10; // Distance within which Avatar reacts
-  
-    useEffect(() => {
-        if (scene && animations) {
-          avatarRef.current = scene;
-          avatarRef.current.position.set(...position);
-          avatarRef.current.scale.set(1.5, 1.5, 1.5); // Adjust scale if needed
-          mixer.current = new THREE.AnimationMixer(scene);
-      
-          // Log available animations
-          console.log("Available animations:", animations.map((clip) => clip.name));
-      
-          animations.forEach((clip) => {
-            actions.current[clip.name] = mixer.current.clipAction(clip);
-          });
-      
-          // Play default idle animation
-          if (actions.current["Take 01"]) {
-            actions.current["Take 01"].play();
-          } else {
-            console.error("Idle animation not found. Available actions:", Object.keys(actions.current));
-          }
-        }
-      }, [scene, animations, position]);
-  
-    // Move Avatar autonomously
-    useFrame((_, delta) => {
-      if (avatarRef.current && mixer.current) {
-        mixer.current.update(delta);
-  
-        // Example patrol logic: Move in a circle
-        const time = Date.now() * 0.001;
-        avatarRef.current.position.x = position[0] + Math.sin(time) * 5;
-        avatarRef.current.position.z = position[2] + Math.cos(time) * 5;
-      }
-  
-      // Check if Avatar should react to an attack
-      if (attackPosition && avatarRef.current) {
-        const distance = avatarRef.current.position.distanceTo(attackPosition);
-        if (distance < visionRadius) {
-          // Trigger "die" animation
-          actions.current["Take 01"]?.fadeOut(0.5);
-          actions.current["die"]?.reset().fadeIn(0.5).play();
-        }
-      }
-    });
-  
-    return <primitive ref={avatarRef} object={scene} />;
-  };
 
-  export default Avatar 
+const Avatar = ({ characterName, position }) => {
+  const avatarRef = useRef();
+  const { scene, animations } = useGLTF("https://storage.googleapis.com/new-music/ultimate_monsters_pack.glb");
+  const mixer = useRef(null);
+  const actions = useRef({});
+  const visionRadius = 10;
+
+  useEffect(() => {
+    if (scene) {
+      // Log the scene hierarchy for debugging
+      console.log("GLTF Scene Hierarchy:");
+      scene.traverse((child) => {
+        console.log("Object Name:", child.name, "| Type:", child.type);
+      });
+
+      // Find the specified character by name or partial match
+      const character = scene.getObjectByName(characterName) || scene.children.find((child) => child.name.includes(characterName));
+
+      if (character) {
+        avatarRef.current = character;
+        avatarRef.current.position.set(...position);
+        avatarRef.current.scale.set(3.5, 3.5, 3.5);
+
+        // Setup animation mixer
+        mixer.current = new THREE.AnimationMixer(character);
+
+        animations.forEach((clip) => {
+          const targetName = clip.tracks[0]?.name.split(".")[0]; // Extract target node name
+          const targetNode = character.getObjectByName(targetName) || character; // Fallback to character if node not found
+
+          if (targetNode) {
+            actions.current[clip.name] = mixer.current.clipAction(clip, targetNode);
+          } else {
+            console.warn(`Target node ${targetName} not found for animation ${clip.name}`);
+          }
+        });
+
+        // Play default idle animation
+        actions.current["Take 01"]?.play();
+      } else {
+        console.error(`Character ${characterName} not found`);
+      }
+    }
+  }, [scene, animations, characterName, position]);
+
+  useEffect(() => {
+    return () => {
+      if (mixer.current) mixer.current.stopAllAction(); // Cleanup actions
+    };
+  }, []);
+
+  useFrame((state, delta) => {
+    if (mixer.current) mixer.current.update(delta);
+
+    // Simple random movement logic for the Avatar
+    if (avatarRef.current) {
+      avatarRef.current.position.x += (Math.random() - 0.5) * 0.05;
+      avatarRef.current.position.z += (Math.random() - 0.5) * 0.05;
+
+      // Keep within bounds
+      avatarRef.current.position.x = THREE.MathUtils.clamp(avatarRef.current.position.x, position[0] - 10, position[0] + 10);
+      avatarRef.current.position.z = THREE.MathUtils.clamp(avatarRef.current.position.z, position[2] - 10, position[2] + 10);
+    }
+  });
+
+  return avatarRef.current ? <primitive object={avatarRef.current} /> : null;
+};
+
+export default Avatar;

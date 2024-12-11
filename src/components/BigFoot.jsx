@@ -1,82 +1,95 @@
 import React, { useRef, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useGLTF, useAnimations } from "@react-three/drei";
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import useKeyboard from "./CharacterControls";
 
-const BigFoot = ({ position, scale, camera }) => {
+const BigFoot = ({ modelUrl, position, scale, rocks, setRocks }) => {
   const bigFootRef = useRef();
-  const { scene, animations } = useGLTF("https://storage.googleapis.com/new-music/bigfoot2.glb");
-  const { actions } = useAnimations(animations, bigFootRef);
-  const keysPressed = useRef({}); // Tracks keypresses for movement
+  const mixer = useRef();
+  const actions = useRef({});
   const currentAction = useRef("idle");
+  const carryingRock = useRef(null);
+
+  const { scene, animations } = useGLTF(modelUrl);
+  const keyboardActions = useKeyboard();
 
   useEffect(() => {
-    if (bigFootRef.current) {
+    if (scene) {
+      bigFootRef.current = scene;
       bigFootRef.current.position.set(...position);
       bigFootRef.current.scale.set(...scale);
 
-      // Start with idle animation
-      actions.idle?.play();
+      // Initialize animations
+      mixer.current = new THREE.AnimationMixer(scene);
+      animations.forEach((clip) => {
+        actions.current[clip.name] = mixer.current.clipAction(clip);
+      });
+
+      // Default to idle animation
+      actions.current["idle"]?.play();
     }
+  }, [scene, animations, position, scale]);
 
-    const handleKeyDown = (e) => {
-      keysPressed.current[e.key.toLowerCase()] = true;
-    };
-    const handleKeyUp = (e) => {
-      keysPressed.current[e.key.toLowerCase()] = false;
-    };
+  const throwRock = () => {
+    if (!carryingRock.current) {
+      console.log("Throwing rock!");
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
+      const throwAction = actions.current["throw"];
+      throwAction?.reset().fadeIn(0.1).play();
 
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [actions, position, scale]);
+      // Simulate rock throw (e.g., spawn a rock)
+      setTimeout(() => {
+        const thrownRock = {
+          id: Date.now(),
+          position: bigFootRef.current.position.clone(),
+          velocity: bigFootRef.current
+            .getWorldDirection(new THREE.Vector3())
+            .multiplyScalar(5),
+        };
+        setRocks((prevRocks) => [...prevRocks, thrownRock]);
+
+        carryingRock.current = false;
+      }, 500); // Delay for realism
+    }
+  };
 
   useFrame((_, delta) => {
-    if (!bigFootRef.current) return;
+    if (mixer.current) mixer.current.update(delta);
 
     const moveVector = new THREE.Vector3();
-    let newAction = "idle"; // Default animation is idle
+    let newAction = "idle";
 
-    // Movement and rotation logic
-    if (keysPressed.current["arrowup"]) {
-      moveVector.z -= 0.1; // Move forward
+    // Handle movement
+    if (keyboardActions.moveForward) {
+      moveVector.z -= 0.1;
       newAction = "walk";
     }
-    if (keysPressed.current["arrowdown"]) {
-      moveVector.z += 0.1; // Move backward
+    if (keyboardActions.moveBackward) {
+      moveVector.z += 0.1;
       newAction = "walk";
     }
-    if (keysPressed.current["arrowleft"]) {
-      bigFootRef.current.rotation.y += 0.05; // Rotate left
+    if (keyboardActions.moveLeft) {
+      bigFootRef.current.rotation.y += 0.05;
     }
-    if (keysPressed.current["arrowright"]) {
-      bigFootRef.current.rotation.y -= 0.05; // Rotate right
+    if (keyboardActions.moveRight) {
+      bigFootRef.current.rotation.y -= 0.05;
     }
-    if (keysPressed.current["t"]) {
-        newAction = "throw"; // Rotate right
-      }
-    
+    if (keyboardActions.space) {
+      newAction = "throw";
+      throwRock();
+    }
 
-    // Apply movement
-    bigFootRef.current.translateZ(moveVector.z);
+    // Update BigFoot's position
+    if (bigFootRef.current) {
+      bigFootRef.current.translateZ(moveVector.z);
+    }
 
-    // Handle animation switching
-    if (actions && newAction !== currentAction.current) {
-      actions[currentAction.current]?.fadeOut(0.2);
-      actions[newAction]?.reset().fadeIn(0.2).play();
+    // Handle animation transitions
+    if (newAction !== currentAction.current) {
+      actions.current[currentAction.current]?.fadeOut(0.2);
+      actions.current[newAction]?.reset().fadeIn(0.2).play();
       currentAction.current = newAction;
-    }
-
-    // Make camera follow BigFoot
-    if (camera) {
-      const offset = new THREE.Vector3(0, 2, -5); // Adjust camera position behind BigFoot
-      const target = bigFootRef.current.position.clone();
-      camera.position.copy(target.add(offset));
-      camera.lookAt(bigFootRef.current.position);
     }
   });
 

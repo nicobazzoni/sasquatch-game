@@ -6,7 +6,7 @@ const actionByKey = (key) => {
     KeyS: "moveBackward",
     KeyA: "moveLeft",
     KeyD: "moveRight",
-    Space: "jump"
+    Space: "throw"
   };
 
   return keyActionMap[key];
@@ -18,7 +18,7 @@ const useKeyboard = () => {
     moveBackward: false,
     moveLeft: false,
     moveRight: false,
-    jump: false
+    throw: false
   });
 
   const handleKeyChange = useCallback((keyCode, value) => {
