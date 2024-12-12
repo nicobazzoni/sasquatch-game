@@ -1,15 +1,21 @@
-html,
-body,
-#root {
+/* index.css */
+
+/* Ensure body and html take up the full screen */
+body, html {
   margin: 0;
   padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 
-  position: fixed;
+/* Ensure the Canvas is full-screen */
+canvas {
+  display: block; /* Remove any inline spacing */
+  width: 100vw;   /* Full viewport width */
+  height: 100vh;  /* Full viewport height */
+  position: fixed; /* Fix it to the screen */
   top: 0;
   left: 0;
-
-  height: 100%;
-  width: 100%;
-
-  overflow: hidden;
+  z-index: -1;    /* Send it to the back */
 }
