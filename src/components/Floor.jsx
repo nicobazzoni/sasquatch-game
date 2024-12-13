@@ -7,7 +7,7 @@ const Floor = () => {
   return (
     <>
       {/* Load the forest GLTF model */}
-      <primitive object={scene} position={[0, -0.01, 0]} />
+      <primitive object={scene} scale={[2,2,2]} position={[0, -0.01, 0]} />
     </>
   );
 };

@@ -1,38 +1,51 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { v4 as uuidv4 } from "uuid";
 import Enemy from "./Enemy";
 import Particle from "./Particle";
 import Weapon from "./Weapon";
 import Floor from "./Floor";
+import { v4 as uuidv4 } from "uuid";
+import { Sky,Cloud  } from "@react-three/drei";
+import MovingCloud from "./MovingCloud";
+
 
 const Scene = () => {
   const [enemies, setEnemies] = useState([]);
   const [particles, setParticles] = useState([]);
-  const { camera } = useThree(); // Access the Three.js camera
-  const playerRef = useRef(); // Reference for the player "body"
-  const maxEnemies = 5; // Maximum number of enemies at once
+  const { camera } = useThree();
+  const playerRef = useRef();
+  const keys = useRef({ w: false, a: false, s: false, d: false }); // Track key presses
+  const maxEnemies = 5;
 
-  // Track key presses for movement
-  const keys = useRef({
-    w: false,
-    a: false,
-    s: false,
-    d: false,
-  });
-
-  // Event listeners for keyboard input
+  // Initialize enemies once
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (keys.current[e.key.toLowerCase()] !== undefined) {
-        keys.current[e.key.toLowerCase()] = true;
+    const initialEnemies = Array.from({ length: maxEnemies }).map(() => ({
+      id: uuidv4(),
+      position: [
+        Math.random() * 20 - 10,
+        0.5,
+        Math.random() * 20 - 10,
+      ],
+      visible: true,
+      boundingBox: null,
+    }));
+    setEnemies(initialEnemies);
+  }, []);
+
+  // Add event listeners for keyboard input
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const key = event.key.toLowerCase();
+      if (keys.current[key] !== undefined) {
+        keys.current[key] = true;
       }
     };
 
-    const handleKeyUp = (e) => {
-      if (keys.current[e.key.toLowerCase()] !== undefined) {
-        keys.current[e.key.toLowerCase()] = false;
+    const handleKeyUp = (event) => {
+      const key = event.key.toLowerCase();
+      if (keys.current[key] !== undefined) {
+        keys.current[key] = false;
       }
     };
 
@@ -45,51 +58,26 @@ const Scene = () => {
     };
   }, []);
 
-  // Spawn new enemies periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setEnemies((prev) => {
-        const visibleEnemies = prev.filter((e) => e.visible).length;
-        if (visibleEnemies >= maxEnemies) return prev; // Respect max limit
-        return [
-          ...prev,
-          {
-            id: uuidv4(), // Generate a unique ID for each enemy
-            position: [
-              Math.random() * 20 - 10,
-              0.5,
-              Math.random() * 20 - 10,
-            ],
-            visible: true,
-            boundingBox: null,
-          },
-        ];
-      });
-    }, 2000); // Spawn new enemy every 2 seconds
-
-    return () => clearInterval(interval); // Clear interval on unmount
-  }, []);
+  
 
   // Handle collision when a particle hits an enemy
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setEnemies((prev) => [
-        ...prev,
-        {
-          id: uuidv4(),
-          position: [
-            Math.random() * 20 - 10,
-            0.5,
-            Math.random() * 20 - 10,
-          ],
-          visible: true,
-          boundingBox: null,
-        },
-      ]);
-    }, 3000); // Add a new enemy every 5 seconds for testing
-  
-    return () => clearInterval(interval);
-  }, []);
+  const handleCollision = (enemyId) => {
+    setEnemies((prev) =>
+      prev.map((enemy) =>
+        enemy.id === enemyId
+          ? {
+              ...enemy,
+              position: [
+                Math.random() * 20 - 10,
+                0.5,
+                Math.random() * 20 - 10,
+              ],
+              visible: true,
+            }
+          : enemy
+      )
+    );
+  };
 
   // Update player position and link camera to player
   useFrame(() => {
@@ -122,28 +110,28 @@ const Scene = () => {
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial color="blue" />
       </mesh>
+ 
 
       {/* Floor */}
       <Floor />
 
       {/* Render Enemies */}
       {enemies.map((enemy) =>
- 
-  enemy.visible ? (
-    <Enemy
-      key={enemy.id}
-      id={enemy.id}
-      position={enemy.position}
-      setBoundingBox={(boundingBox) =>
-        setEnemies((prev) =>
-          prev.map((e) =>
-            e.id === enemy.id ? { ...e, boundingBox } : e
-          )
-        )
-      }
-    />
-  ) : null
-)}
+        enemy.visible ? (
+          <Enemy
+            key={enemy.id}
+            id={enemy.id}
+            position={enemy.position}
+            setBoundingBox={(boundingBox) =>
+              setEnemies((prev) =>
+                prev.map((e) =>
+                  e.id === enemy.id ? { ...e, boundingBox } : e
+                )
+              )
+            }
+          />
+        ) : null
+      )}
 
       {/* Render Weapon */}
       <Weapon
@@ -162,7 +150,7 @@ const Scene = () => {
           start={particle.start}
           direction={particle.direction}
           enemies={enemies}
-          // onCollision={handleCollision}
+          onCollision={handleCollision}
           onRemove={() =>
             setParticles((prev) => prev.filter((p) => p.id !== particle.id))
           }
