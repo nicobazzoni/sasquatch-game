@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import useSound from "./useSound";
 
 const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHit }) => {
   const { scene, animations } = useGLTF("https://storage.googleapis.com/new-music/bigfootw%3Ajumpanddie.glb");
@@ -11,19 +12,21 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
   const actions = useRef({});
   const hitCount = useRef(0);
   const isDead = useRef(false);
-  const velocity = useRef(new THREE.Vector3(0, 0, 0));
+  const velocity = useRef(new THREE.Vector3(0, 0, 2)); // Start with default velocity
   const respawnPosition = useRef(position.slice());
   const attackCooldown = useRef(false);
+
+  const deathCry = useSound("https://storage.googleapis.com/new-music/ESM_HC3_cinematic_fx_voice_bigfoot_pain_grunt_painful_roar_growl.wav");
 
   useEffect(() => {
     if (animations && animations.length > 0) {
       mixer.current = new THREE.AnimationMixer(scene);
 
-      animations.forEach((clip) => {
-        actions.current[clip.name] = mixer.current
-          .clipAction(clip, ref.current)
-          .setEffectiveWeight(1);
-      });
+      animations
+        .filter((clip) => clip.name.toLowerCase() !== "tpose")
+        .forEach((clip) => {
+          actions.current[clip.name] = mixer.current.clipAction(clip, ref.current).setEffectiveWeight(1);
+        });
 
       console.log("Available animations:", Object.keys(actions.current));
       resetState();
@@ -33,7 +36,7 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
   const resetState = () => {
     hitCount.current = 0;
     isDead.current = false;
-    velocity.current.set(0, 0, 0);
+    velocity.current.set(0, 0, 2); // Default speed
 
     if (ref.current) {
       ref.current.position.set(...respawnPosition.current);
@@ -44,26 +47,20 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
       action.reset();
     });
 
-    if (actions.current["run"]) {
-      actions.current["run"].play();
-      velocity.current.set(0, 0, 5);
-    }
+    playAnimation("run");
   };
+
   const handleHit = () => {
     if (isDead.current) return;
-  
+
     hitCount.current += 1;
     console.log(`Hit Count: ${hitCount.current}`);
-  
+
     if (hitCount.current === 1) {
-      console.log("Bigfoot starts walking!");
       playAnimation("run");
-      velocity.current.set(0, 0, 5); // Walking speed
-   // Running speed
     } else if (hitCount.current >= 3) {
-      console.log("Bigfoot dies!");
       isDead.current = true;
-  
+
       Object.values(actions.current).forEach((action) => action.stop());
       if (actions.current["die"]) {
         const dieAction = actions.current["die"];
@@ -71,19 +68,18 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
         dieAction.setLoop(THREE.LoopOnce, 1);
         dieAction.clampWhenFinished = true;
         dieAction.play();
-  
+        deathCry();
+
         mixer.current.addEventListener("finished", (event) => {
           if (event.action === dieAction) {
-            console.log("Bigfoot's death animation finished.");
             resetState();
           }
         });
       }
-  
+
       if (onHit) onHit(id);
     }
   };
-
 
   const moveTowardPlayer = (delta) => {
     if (!playerPosition) return;
@@ -92,11 +88,17 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
     const direction = playerPos.clone().sub(ref.current.position).normalize();
     const speed = 2;
 
-    velocity.current.copy(direction.multiplyScalar(speed));
+    velocity.current.lerp(direction.multiplyScalar(speed), 0.1); // Smooth adjustment
   };
 
   const playAnimation = (animationName) => {
     if (actions.current[animationName]) {
+      const currentAction = Object.keys(actions.current).find((key) =>
+        actions.current[key]?.isRunning()
+      );
+
+      if (currentAction === animationName) return;
+
       Object.values(actions.current).forEach((action) => {
         if (action !== actions.current[animationName]) {
           action.fadeOut(0.2);
@@ -113,79 +115,66 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
   };
 
   useFrame((_, delta) => {
-    if (mixer.current) mixer.current.update(delta);
-  
-    if (isDead.current || !ref.current) return;
-  
-    // Random direction change every 2 seconds
-    const time = performance.now() / 1000; // Current time in seconds
-    const changeInterval = 2; // Interval to change direction
-  
-    if (Math.floor(time) % changeInterval === 0 && !velocity.current.isChanging) {
-      velocity.current.isChanging = true;
-  
-      // Generate a new random direction
-      const randomAngle = Math.random() * Math.PI * 2; // Random angle in radians
-      velocity.current.set(
-        Math.cos(randomAngle) * 2, // X component
-        0,
-        Math.sin(randomAngle) * 2 // Z component
-      );
-  
-      // Reset flag after a short delay
-      setTimeout(() => {
-        velocity.current.isChanging = false;
-      }, 200);
+    if (!mixer.current || !ref.current) return;
+    mixer.current.update(delta);
+
+    if (isDead.current) return;
+
+    const playerPos = playerPosition ? new THREE.Vector3(...playerPosition) : null;
+    const distanceToPlayer = playerPos ? ref.current.position.distanceTo(playerPos) : Infinity;
+
+    if (distanceToPlayer < 2) {
+      if (!attackCooldown.current) {
+        attackCooldown.current = true;
+
+        velocity.current.set(0, 0, 0); // Stop movement during attack
+        playAnimation("attack");
+
+        const directionToPlayer = playerPos.clone().sub(ref.current.position).normalize();
+        const angle = Math.atan2(directionToPlayer.x, directionToPlayer.z);
+        ref.current.rotation.y = THREE.MathUtils.lerp(ref.current.rotation.y, angle, 0.1);
+
+        if (onPlayerHit) onPlayerHit(id);
+
+        setTimeout(() => {
+          attackCooldown.current = false;
+          if (!isDead.current) {
+            playAnimation("run");
+            velocity.current.set(0, 0, 2); // Resume movement
+          }
+        }, 1000);
+      }
+      return;
     }
-  
-    // Keep speed consistent
-    velocity.current.setLength(2); // Ensure velocity magnitude remains constant
-  
-    // Apply movement
+
+    if (distanceToPlayer < 10) {
+      moveTowardPlayer(delta);
+      playAnimation("run");
+    } else {
+      const time = performance.now() / 1000;
+      if (Math.floor(time) % 2 === 0) {
+        const randomAngle = Math.random() * Math.PI * 2;
+        const randomDirection = new THREE.Vector3(Math.cos(randomAngle), 0, Math.sin(randomAngle));
+        velocity.current.lerp(randomDirection.multiplyScalar(4), 0.1);
+      }
+    }
+
+    if (velocity.current.length() < 0.01 && !isDead.current) {
+      velocity.current.set(0, 0, 2); // Wake up Bigfoot if stuck
+    }
+
     const moveVector = velocity.current.clone().multiplyScalar(delta);
     ref.current.position.add(moveVector);
-  
-    // Align Bigfoot's rotation with his movement direction
-    if (velocity.current.length() > 0) {
-      const targetDirection = velocity.current.clone().normalize(); // Get movement direction
-      const angle = Math.atan2(targetDirection.x, targetDirection.z); // Calculate rotation angle
-      ref.current.rotation.y = angle; // Rotate Bigfoot to face the movement direction
-    }
-  
-    // Keep Bigfoot within boundaries and redirect smoothly
-    const minX = -50, maxX = 50;
-    const minZ = -50, maxZ = 50;
-  
-    if (ref.current.position.x < minX) {
-      ref.current.position.x = minX;
-      velocity.current.x = Math.abs(velocity.current.x); // Redirect smoothly
-    }
-    if (ref.current.position.x > maxX) {
-      ref.current.position.x = maxX;
-      velocity.current.x = -Math.abs(velocity.current.x); // Redirect smoothly
-    }
-    if (ref.current.position.z < minZ) {
-      ref.current.position.z = minZ;
-      velocity.current.z = Math.abs(velocity.current.z); // Redirect smoothly
-    }
-    if (ref.current.position.z > maxZ) {
-      ref.current.position.z = maxZ;
-      velocity.current.z = -Math.abs(velocity.current.z); // Redirect smoothly
-    }
-  
-    if (ref.current) {
-      boundingBox.current.setFromObject(ref.current);
-      if (setBoundingBox) setBoundingBox(boundingBox.current);
-    }
+
+    const targetDirection = velocity.current.clone().normalize();
+    const angle = Math.atan2(targetDirection.x, targetDirection.z);
+    ref.current.rotation.y = THREE.MathUtils.lerp(ref.current.rotation.y, angle, 0.05);
+
+    boundingBox.current.setFromObject(ref.current);
+    if (setBoundingBox) setBoundingBox(boundingBox.current);
   });
-  return (
-    <primitive
-      ref={ref}
-      object={scene}
-      scale={[4, 4, 4]}
-      onPointerDown={handleHit}
-    />
-  );
+
+  return <primitive ref={ref} object={scene} scale={[4, 4, 4]} onPointerDown={handleHit} />;
 };
 
 export default Enemy;

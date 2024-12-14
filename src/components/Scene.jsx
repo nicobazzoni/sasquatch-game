@@ -6,27 +6,34 @@ import Particle from "./Particle";
 import Weapon from "./Weapon";
 import Floor from "./Floor";
 import { v4 as uuidv4 } from "uuid";
-import { Sky,Cloud  } from "@react-three/drei";
-import MovingCloud from "./MovingCloud";
-
 
 const Scene = () => {
   const [enemies, setEnemies] = useState([]);
   const [particles, setParticles] = useState([]);
   const { camera } = useThree();
   const playerRef = useRef();
-  const keys = useRef({ w: false, a: false, s: false, d: false }); // Track key presses
-  const maxEnemies = 5;
+  const keys = useRef({ w: false, a: false, s: false, d: false });
+  const maxEnemies = 1; // Reduced to 1 for debugging
 
-  // Initialize enemies once
+  // Get player position
+  const playerPosition = playerRef.current
+    ? playerRef.current.position.toArray()
+    : [0, 0, 0];
+
+  // Log for debugging "double Bigfoot"
+ 
+
+  // Handle player being hit
+  const handlePlayerHit = (enemyId) => {
+    console.log(`Player hit by enemy with ID: ${enemyId}`);
+    // Add logic here (e.g., reduce player health)
+  };
+
+  // Initialize enemies
   useEffect(() => {
     const initialEnemies = Array.from({ length: maxEnemies }).map(() => ({
       id: uuidv4(),
-      position: [
-        Math.random() * 20 - 10,
-        0.5,
-        Math.random() * 20 - 10,
-      ],
+      position: [Math.random() * 20 - 10, 0.5, Math.random() * 20 - 10],
       visible: true,
       boundingBox: null,
     }));
@@ -58,8 +65,6 @@ const Scene = () => {
     };
   }, []);
 
-  
-
   // Handle collision when a particle hits an enemy
   const handleCollision = (enemyId) => {
     setEnemies((prev) =>
@@ -83,22 +88,19 @@ const Scene = () => {
   useFrame(() => {
     if (!playerRef.current) return;
 
-    const speed = 0.1; // Movement speed
+    const speed = 0.1;
     const direction = new THREE.Vector3();
 
-    // Calculate movement direction
     if (keys.current.w) direction.z -= speed;
     if (keys.current.s) direction.z += speed;
     if (keys.current.a) direction.x -= speed;
     if (keys.current.d) direction.x += speed;
 
-    // Update player position
     playerRef.current.position.add(direction);
 
-    // Attach the camera to the player's position
     camera.position.set(
       playerRef.current.position.x,
-      playerRef.current.position.y + 1.6, // Adjust camera height
+      playerRef.current.position.y + 1.6,
       playerRef.current.position.z
     );
   });
@@ -110,7 +112,6 @@ const Scene = () => {
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial color="blue" />
       </mesh>
- 
 
       {/* Floor */}
       <Floor />
@@ -129,6 +130,8 @@ const Scene = () => {
                 )
               )
             }
+            playerPosition={playerPosition}
+            onPlayerHit={handlePlayerHit}
           />
         ) : null
       )}
