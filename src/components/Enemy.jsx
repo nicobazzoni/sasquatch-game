@@ -15,6 +15,8 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
   const velocity = useRef(new THREE.Vector3(0, 0, 2)); // Start with default velocity
   const respawnPosition = useRef(position.slice());
   const attackCooldown = useRef(false);
+  const randomTarget = useRef(new THREE.Vector3());
+const randomTargetTimer = useRef(0);
 
   const deathCry = useSound("https://storage.googleapis.com/new-music/ESM_HC3_cinematic_fx_voice_bigfoot_pain_grunt_painful_roar_growl.wav");
 
@@ -32,6 +34,17 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
       resetState();
     }
   }, [animations, scene]);
+
+  const generateRandomTarget = () => {
+    const minX = -50, maxX = 50;
+    const minZ = -50, maxZ = 50;
+  
+    const x = Math.random() * (maxX - minX) + minX;
+    const z = Math.random() * (maxZ - minZ) + minZ;
+  
+    randomTarget.current.set(x, 0, z);
+    console.log("New Random Target:", randomTarget.current);
+  };
 
   const resetState = () => {
     hitCount.current = 0;
@@ -117,25 +130,26 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
   useFrame((_, delta) => {
     if (!mixer.current || !ref.current) return;
     mixer.current.update(delta);
-
+  
     if (isDead.current) return;
-
+  
     const playerPos = playerPosition ? new THREE.Vector3(...playerPosition) : null;
     const distanceToPlayer = playerPos ? ref.current.position.distanceTo(playerPos) : Infinity;
-
+  
     if (distanceToPlayer < 2) {
+      // Attack logic
       if (!attackCooldown.current) {
         attackCooldown.current = true;
-
+  
         velocity.current.set(0, 0, 0); // Stop movement during attack
         playAnimation("attack");
-
+  
         const directionToPlayer = playerPos.clone().sub(ref.current.position).normalize();
         const angle = Math.atan2(directionToPlayer.x, directionToPlayer.z);
         ref.current.rotation.y = THREE.MathUtils.lerp(ref.current.rotation.y, angle, 0.1);
-
+  
         if (onPlayerHit) onPlayerHit(id);
-
+  
         setTimeout(() => {
           attackCooldown.current = false;
           if (!isDead.current) {
@@ -146,30 +160,41 @@ const Enemy = ({ id, position, setBoundingBox, playerPosition, onHit, onPlayerHi
       }
       return;
     }
-
+  
     if (distanceToPlayer < 10) {
+      // Chase player
       moveTowardPlayer(delta);
       playAnimation("run");
     } else {
-      const time = performance.now() / 1000;
-      if (Math.floor(time) % 2 === 0) {
-        const randomAngle = Math.random() * Math.PI * 2;
-        const randomDirection = new THREE.Vector3(Math.cos(randomAngle), 0, Math.sin(randomAngle));
-        velocity.current.lerp(randomDirection.multiplyScalar(4), 0.1);
+      // Random movement
+      randomTargetTimer.current += delta;
+  
+      if (randomTargetTimer.current > 3) {
+        generateRandomTarget(); // Generate a new random target every 3 seconds
+        randomTargetTimer.current = 0;
+      }
+  
+      const directionToTarget = randomTarget.current.clone().sub(ref.current.position).normalize();
+      velocity.current.lerp(directionToTarget.multiplyScalar(2), 0.1); // Move toward target
+      playAnimation("run");
+  
+      // Check if Bigfoot has reached the target
+      if (ref.current.position.distanceTo(randomTarget.current) < 1) {
+        generateRandomTarget(); // Generate a new target if close
       }
     }
-
+  
     if (velocity.current.length() < 0.01 && !isDead.current) {
       velocity.current.set(0, 0, 2); // Wake up Bigfoot if stuck
     }
-
+  
     const moveVector = velocity.current.clone().multiplyScalar(delta);
     ref.current.position.add(moveVector);
-
+  
     const targetDirection = velocity.current.clone().normalize();
     const angle = Math.atan2(targetDirection.x, targetDirection.z);
     ref.current.rotation.y = THREE.MathUtils.lerp(ref.current.rotation.y, angle, 0.05);
-
+  
     boundingBox.current.setFromObject(ref.current);
     if (setBoundingBox) setBoundingBox(boundingBox.current);
   });
