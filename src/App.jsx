@@ -4,9 +4,12 @@ import { PointerLockControls } from "@react-three/drei";
 import Scene from "./components/Scene";
 import { GridHelper } from "three";
 import Floor from "./components/Floor";
+import { useEffect } from "react";
 
-
+import useSound from "./components/useSound";
 const App = () => {
+
+
   return ( 
    
       <Canvas camera={{ position: [0, 2, 5], fov: 75 }}>
@@ -15,11 +18,12 @@ const App = () => {
       <directionalLight position={[10, 10, 10]} />
 
       {/* Game Scene */}
-      <Scene />
+      <Scene   />
       <Floor />
      
       {/* Controls */}
       <PointerLockControls />
+    
     </Canvas>
   );
 };

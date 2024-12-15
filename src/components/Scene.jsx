@@ -6,6 +6,47 @@ import Particle from "./Particle";
 import Weapon from "./Weapon";
 import Floor from "./Floor";
 import { v4 as uuidv4 } from "uuid";
+import { Html } from "@react-three/drei";
+
+const SlashEffect = ({ visible }) => {
+  if (!visible) return null;
+
+  return (
+    <Html center>
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          backgroundColor: "rgba(255, 0, 0, 0.5)",
+          pointerEvents: "none",
+          animation: "fade-out 0.9s ease-out forwards",
+        }}
+      />
+    </Html>
+  );
+};
+
+const GameOverText = ({ visible }) => {
+  if (!visible) return null;
+
+  return (
+    <Html center>
+      <div
+        style={{
+          color: "white",
+          fontSize: "3rem",
+          fontWeight: "bold",
+          textAlign: "center",
+        }}
+      >
+        Game Over
+      </div>
+    </Html>
+  );
+};
 
 const Scene = () => {
   const [enemies, setEnemies] = useState([]);
@@ -13,21 +54,29 @@ const Scene = () => {
   const { camera } = useThree();
   const playerRef = useRef();
   const keys = useRef({ w: false, a: false, s: false, d: false });
-  const maxEnemies = 1; // Reduced to 1 for debugging
+  const maxEnemies = 1; // Adjust as needed
+  const [playerHealth, setPlayerHealth] = useState(3); // Player starts with 3 health
+  const [showSlash, setShowSlash] = useState(false); // Controls red slash visibility
+  const [gameOver, setGameOver] = useState(false); // Game over state
 
-  // Get player position
   const playerPosition = playerRef.current
     ? playerRef.current.position.toArray()
     : [0, 0, 0];
 
-  // Log for debugging "double Bigfoot"
- 
-
-  // Handle player being hit
-  const handlePlayerHit = (enemyId) => {
-    console.log(`Player hit by enemy with ID: ${enemyId}`);
-    // Add logic here (e.g., reduce player health)
-  };
+    const handlePlayerHit = () => {
+      if (playerHealth > 1) {
+        // Reduce health and show the slash effect
+        setPlayerHealth((prev) => prev - 1);
+        console.log(`Player hit! Remaining health: ${playerHealth - 1}`);
+        setShowSlash(true);
+        setTimeout(() => setShowSlash(false), 500); // Hide slash effect after 500ms
+      } else if (playerHealth === 1) {
+        // Trigger Game Over when health is 0
+        console.log("Player died. Game Over!");
+        setPlayerHealth(0); // Set health to 0
+        setGameOver(true); // Show Game Over screen
+      }
+    };
 
   // Initialize enemies
   useEffect(() => {
@@ -88,7 +137,7 @@ const Scene = () => {
   useFrame(() => {
     if (!playerRef.current) return;
 
-    const speed = 0.1;
+    const speed = 0.1; // Movement speed
     const direction = new THREE.Vector3();
 
     if (keys.current.w) direction.z -= speed;
@@ -98,9 +147,10 @@ const Scene = () => {
 
     playerRef.current.position.add(direction);
 
+    // Attach the camera to the player's position
     camera.position.set(
       playerRef.current.position.x,
-      playerRef.current.position.y + 1.6,
+      playerRef.current.position.y + 1.6, // Adjust camera height
       playerRef.current.position.z
     );
   });
@@ -112,6 +162,12 @@ const Scene = () => {
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial color="blue" />
       </mesh>
+
+      {/* Game Over Text */}
+      <GameOverText visible={gameOver} />
+
+      {/* Slash Effect */}
+      <SlashEffect visible={showSlash} />
 
       {/* Floor */}
       <Floor />

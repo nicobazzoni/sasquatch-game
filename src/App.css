@@ -1,21 +1,42 @@
-/* index.css */
-
-/* Ensure body and html take up the full screen */
-body, html {
-  margin: 0;
-  padding: 0;
+.scene-container {
+  position: relative;
   width: 100%;
-  height: 100%;
+  height: 100vh;
   overflow: hidden;
 }
 
-/* Ensure the Canvas is full-screen */
-canvas {
-  display: block; /* Remove any inline spacing */
-  width: 100vw;   /* Full viewport width */
-  height: 100vh;  /* Full viewport height */
-  position: fixed; /* Fix it to the screen */
+.red-slash-overlay {
+  position: absolute;
   top: 0;
   left: 0;
-  z-index: -1;    /* Send it to the back */
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 0, 0, 0.5);
+  z-index: 999; /* Ensure it appears above the canvas */
+  pointer-events: none;
+  animation: fade-out 0.5s ease-out forwards;
+}
+
+@keyframes fade-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.game-over-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 4rem;
+  z-index: 1000; /* Ensure it appears above everything */
 }
