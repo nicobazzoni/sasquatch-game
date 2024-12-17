@@ -16,17 +16,23 @@ const Scene = ({
   ...props // Additional props for enemies and collisions
 }) => {
   const [enemies, setEnemies] = useState([]);
-  const [particles, setParticles] = useState([]); // Local state for bullets
+  const [deathCount, setDeathCount] = useState(0); // Track death count
+  const [particles, setParticles] = useState([]); // Bullets
   const { camera } = useThree();
   const playerRef = useRef();
   const keys = useRef({ w: false, a: false, s: false, d: false });
   const maxEnemies = 5;
+
   const [floorBoundary, setFloorBoundary] = useState({
     minX: -50,
     maxX: 50,
     minZ: -50,
     maxZ: 50,
   });
+
+  // Handle enemy death
+
+
   // Initialize enemies
   useEffect(() => {
     const initialEnemies = Array.from({ length: maxEnemies }).map(() => ({
@@ -63,31 +69,28 @@ const Scene = ({
     };
   }, []);
 
-  // Handle player movement and camera attachment
+  // Handle player movement
   useFrame(() => {
     if (!playerRef.current) return;
 
-    const speed = 0.1; // Movement speed
+    const speed = 0.1;
     const direction = new THREE.Vector3();
 
-    // Update direction based on key presses
     if (keys.current.w) direction.z -= speed;
     if (keys.current.s) direction.z += speed;
     if (keys.current.a) direction.x -= speed;
     if (keys.current.d) direction.x += speed;
 
-    // Update player position
     playerRef.current.position.add(direction);
 
-    // Attach camera to the player position
     camera.position.set(
       playerRef.current.position.x,
-      playerRef.current.position.y + 1.6, // Adjust camera height
+      playerRef.current.position.y + 1.6,
       playerRef.current.position.z
     );
   });
 
-  // Handle collision when a particle hits an enemy
+  // Handle collision when a bullet hits an enemy
   const handleCollision = (enemyId) => {
     setEnemies((prev) =>
       prev.map((enemy) =>
@@ -104,7 +107,7 @@ const Scene = ({
           : enemy
       )
     );
-    handleEnemyHit(); // Notify parent about the hit
+    handleEnemyHit();
   };
 
   return (
@@ -135,7 +138,9 @@ const Scene = ({
             }
             playerPosition={playerRef.current?.position.toArray() || [0, 0, 0]}
             onPlayerHit={handlePlayerHit}
-            onHit={handleEnemyDeath}
+            onDeath={() => {
+              handleEnemyDeath(); // Increment death count in App
+            }}
           />
         ) : null
       )}
@@ -143,23 +148,22 @@ const Scene = ({
       {/* Weapon */}
       <Weapon
         onFire={(start, direction) => {
-          // Add new bullet to particles state
           setParticles((prev) => [
             ...prev,
             { id: uuidv4(), start, direction },
           ]);
-          handleAmmoUsage(); // Notify parent about ammo usage
+          handleAmmoUsage();
         }}
       />
 
-      {/* Render Particles */}
+      {/* Render Bullets */}
       {particles.map((particle) => (
         <Particle
           key={particle.id}
           start={particle.start}
           direction={particle.direction}
           enemies={enemies}
-          onCollision={handleCollision} // Notify parent on collision
+          onCollision={handleCollision}
           onRemove={() =>
             setParticles((prev) =>
               prev.filter((p) => p.id !== particle.id)

@@ -1,33 +1,16 @@
 import { useRef, useEffect } from "react";
 
-const useSound = (url, volume = 1.0) => {
-  const audioRef = useRef(null);
+const useSound = (url, loop = false, volume = 0.5) => {
+  const audioRef = useRef(new Audio(url));
 
   useEffect(() => {
-    audioRef.current = new Audio(url);
-
-    // Set the initial volume
-    audioRef.current.volume = Math.min(Math.max(volume, 0.0), 1.0);
-
-    // Reset playback state when the audio ends
-    audioRef.current.addEventListener("ended", () => {
-      audioRef.current.currentTime = 0;
-    });
-
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0; // Cleanup on unmount
-      }
-    };
-  }, [url, volume]);
+    audioRef.current.loop = loop; // Enable looping if needed
+    audioRef.current.volume = volume; // Set volume
+  }, [url, loop, volume]);
 
   const playSound = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0; // Reset to the start
-      audioRef.current
-        .play()
-        .catch((error) => console.error("Failed to play sound:", error));
+    if (audioRef.current.paused) {
+      audioRef.current.play().catch((err) => console.error("Failed to play sound:", err));
     }
   };
 

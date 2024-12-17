@@ -4,16 +4,24 @@ import { PointerLockControls } from "@react-three/drei";
 import Scene from "./components/Scene";
 import Floor from "./components/Floor";
 import useSound from "./components/useSound";
-
+import { GameProvider } from "./GameContext";
 const App = () => {
   const [gameStarted, setGameStarted] = useState(false); // Track user interaction
   const [playerHealth, setPlayerHealth] = useState(100);
   const [ammo, setAmmo] = useState(9);
   const [kills, setKills] = useState(0);
   const [enemyHealth, setEnemyHealth] = useState(100);
+  const [deathCount, setDeathCount] = useState(0);
 
+  const handleEnemyDeath = () => {
+    setKills((prev) => {
+      console.log("Kill registered! Previous kills:", prev);
+      return prev + 1;
+    });
+  };
   const handlePlayerHit = () => setPlayerHealth((prev) => Math.max(prev - 20, 0));
   const handleAmmoUsage = () => setAmmo((prev) => (prev > 0 ? prev - 1 : 0));
+  
   const handleEnemyHit = () => {
     setEnemyHealth((prev) => {
       const newHealth = Math.max(prev - 40, 0);
@@ -24,6 +32,8 @@ const App = () => {
       return newHealth;
     });
   };
+
+  
 
   const resetGame = () => {
     setPlayerHealth(100);
@@ -36,11 +46,20 @@ const App = () => {
     "https://storage.googleapis.com/new-music/Synths_Loops_5_DarkCorridorsFullMix82_Am.wav"
   );
 
-  // Start music after game starts
+  const playEnvironmentSound = useSound(
+  "https://storage.googleapis.com/new-music/winter_forest.glb"
+  )
+  // Start music after game starts);
   const startGame = () => {
     setGameStarted(true);
     playBackgroundMusic();
+   
   };
+
+  useEffect(() => {
+    playEnvironmentSound(); // Play sound on game start
+  }, [playEnvironmentSound]);
+
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
@@ -108,6 +127,7 @@ const App = () => {
       </div>
 
       {/* Game Canvas */}
+      <GameProvider>
       <Canvas camera={{ position: [0, 2, 5], fov: 75 }}>
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 10]} />
@@ -123,10 +143,13 @@ const App = () => {
           handlePlayerHit={handlePlayerHit}
           handleAmmoUsage={handleAmmoUsage}
           handleEnemyHit={handleEnemyHit}
+          handleEnemyDeath={handleEnemyDeath}
         />
         <Floor />
         <PointerLockControls />
+
       </Canvas>
+      </GameProvider>
     </div>
   );
 };
