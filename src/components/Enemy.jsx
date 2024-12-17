@@ -66,7 +66,7 @@ const Enemy = ({
     isDead.current = false;
     deathHandled.current = false;
     hitCount.current = 0;
-    velocity.current.set(0, 0, 0);
+    velocity.current.set(0, 0, 5);
   
     // Ensure Bigfoot spawns some distance away from the player
     if (ref.current) {
@@ -90,7 +90,7 @@ const Enemy = ({
         playGrunt();
         console.log("Bigfoot makes a grunt sound!");
       }
-    }, 30000); // 30,000 ms = 30 seconds
+    }, 10000); // 30,000 ms = 30 seconds
   
     return () => clearInterval(gruntInterval); // Cleanup interval on unmount
   }, [playGrunt]);
@@ -106,11 +106,13 @@ const Enemy = ({
   useFrame((_, delta) => {
     if (!ref.current || !mixer.current) return;
   
+    // Update animations
     mixer.current.update(delta);
   
+    // EARLY EXIT IF DEAD
     if (isDead.current) {
-      velocity.current.set(0, 0, 0);
-      return; // Stop all movement and animations if dead
+      velocity.current.set(0, 0, 0); // Stop all movement
+      return; // Skip further logic
     }
   
     const playerPos = new THREE.Vector3(...playerPosition);
@@ -127,10 +129,10 @@ const Enemy = ({
   
         setTimeout(() => {
           attackCooldown.current = false;
-          if (!isDead.current) playAnimation("run");
+          if (!isDead.current) playAnimation("run"); // Ensure no attack after death
         }, 1500);
       }
-      return;
+      return; // Skip further logic when attacking
     }
   
     // RUN LOGIC: Chase player when close enough
@@ -157,20 +159,20 @@ const Enemy = ({
   
     // BOUNDARY LOGIC: Keep Bigfoot inside the world
     if (ref.current.position.x < BOUNDARY.minX) {
-      ref.current.position.x = BOUNDARY.minX + 1; // Reset position
-      velocity.current.x = Math.abs(velocity.current.x); // Move right
+      ref.current.position.x = BOUNDARY.minX + 1;
+      velocity.current.x = Math.abs(velocity.current.x);
     }
     if (ref.current.position.x > BOUNDARY.maxX) {
-      ref.current.position.x = BOUNDARY.maxX - 1; // Reset position
-      velocity.current.x = -Math.abs(velocity.current.x); // Move left
+      ref.current.position.x = BOUNDARY.maxX - 1;
+      velocity.current.x = -Math.abs(velocity.current.x);
     }
     if (ref.current.position.z < BOUNDARY.minZ) {
-      ref.current.position.z = BOUNDARY.minZ + 1; // Reset position
-      velocity.current.z = Math.abs(velocity.current.z); // Move forward
+      ref.current.position.z = BOUNDARY.minZ + 1;
+      velocity.current.z = Math.abs(velocity.current.z);
     }
     if (ref.current.position.z > BOUNDARY.maxZ) {
-      ref.current.position.z = BOUNDARY.maxZ - 1; // Reset position
-      velocity.current.z = -Math.abs(velocity.current.z); // Move backward
+      ref.current.position.z = BOUNDARY.maxZ - 1;
+      velocity.current.z = -Math.abs(velocity.current.z);
     }
   
     // ROTATE TO FACE MOVEMENT DIRECTION
@@ -183,32 +185,35 @@ const Enemy = ({
       );
     }
   });
+  
+  
   const handleHit = () => {
-    if (isDead.current) return; // Prevent further hits if already dead
+    if (isDead.current) return; // Prevent further hits after death
   
     hitCount.current += 1;
   
     if (hitCount.current >= 3) {
-      isDead.current = true; // Mark as dead
-      velocity.current.set(0, 0, 0); // Stop all movement
+      isDead.current = true;
   
-      playAnimation("die");
-      playDeathRoar();
+      // Stop all current animations and play death animation
+      Object.values(actions.current).forEach((action) => action.stop());
+      playAnimation("die",);
+      playDeathRoar(0.3);
   
       const dieAction = actions.current["die"];
       if (dieAction) {
         dieAction.setLoop(THREE.LoopOnce, 1);
         dieAction.clampWhenFinished = true;
-  
         dieAction.play();
+  
         mixer.current.addEventListener("finished", (e) => {
           if (e.action === dieAction) {
-            onDeath(id); // Notify parent component about kill
-            resetState(); // Respawn logic
+            onDeath(id);
+            resetState(); // Reset after death
           }
         });
       } else {
-        onDeath(id); // If no die animation, reset immediately
+        onDeath(id);
         resetState();
       }
     }

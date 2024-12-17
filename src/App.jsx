@@ -1,40 +1,30 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 import { PointerLockControls } from "@react-three/drei";
 import Scene from "./components/Scene";
 import Floor from "./components/Floor";
+import useSound from "./components/useSound";
 
 const App = () => {
-  // Game state
+  const [gameStarted, setGameStarted] = useState(false); // Track user interaction
   const [playerHealth, setPlayerHealth] = useState(100);
   const [ammo, setAmmo] = useState(9);
   const [kills, setKills] = useState(0);
   const [enemyHealth, setEnemyHealth] = useState(100);
 
-  // Handle player getting hit
-  const handlePlayerHit = () => {
-    setPlayerHealth((prev) => Math.max(prev - 20, 0)); // Reduce health by 20
-  };
-
-  // Handle ammo usage
-  const handleAmmoUsage = () => {
-    setAmmo((prev) => (prev > 0 ? prev - 1 : 0)); // Decrease ammo by 1
-  };
-
-  // Unified enemy hit and death handler
+  const handlePlayerHit = () => setPlayerHealth((prev) => Math.max(prev - 20, 0));
+  const handleAmmoUsage = () => setAmmo((prev) => (prev > 0 ? prev - 1 : 0));
   const handleEnemyHit = () => {
     setEnemyHealth((prev) => {
-      const newHealth = Math.max(prev - 40, 0); // Reduce enemy health by 40
+      const newHealth = Math.max(prev - 40, 0);
       if (newHealth <= 0) {
-        console.log("Enemy defeated!");
-        setKills((prevKills) => prevKills + 1); // Increment kill count
-        return 100; // Reset enemy health for the next enemy
+        setKills((prevKills) => prevKills + 1);
+        return 100;
       }
       return newHealth;
     });
   };
 
-  // Reset game state
   const resetGame = () => {
     setPlayerHealth(100);
     setAmmo(9);
@@ -42,8 +32,51 @@ const App = () => {
     setEnemyHealth(100);
   };
 
+  const playBackgroundMusic = useSound(
+    "https://storage.googleapis.com/new-music/Synths_Loops_5_DarkCorridorsFullMix82_Am.wav"
+  );
+
+  // Start music after game starts
+  const startGame = () => {
+    setGameStarted(true);
+    playBackgroundMusic();
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+      {!gameStarted && (
+        <div
+          style={{
+            position: "absolute",
+            top: "0",
+            left: "0",
+            width: "100%",
+            height: "100%",
+            backgroundColor: "black",
+            color: "white",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+          }}
+        >
+          <button
+            onClick={startGame}
+            style={{
+              padding: "20px 40px",
+              fontSize: "24px",
+              backgroundColor: "#28a745",
+              color: "white",
+              border: "none",
+              borderRadius: "10px",
+              cursor: "pointer",
+            }}
+          >
+            Start Game
+          </button>
+        </div>
+      )}
+
       {/* Stats Section */}
       <div
         style={{
@@ -76,11 +109,8 @@ const App = () => {
 
       {/* Game Canvas */}
       <Canvas camera={{ position: [0, 2, 5], fov: 75 }}>
-        {/* Lighting */}
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 10]} />
-
-        {/* Game Scene */}
         <Scene
           playerHealth={playerHealth}
           setPlayerHealth={setPlayerHealth}
