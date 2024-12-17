@@ -5,7 +5,9 @@ import useSound from "./useSound";
 
 const Particle = ({ start, direction, enemies, onCollision, onRemove }) => {
   const ref = useRef();
+  const maxDistance = 50;
 
+  // Load the scream sound for the enemy death
   const playAttackScream = useSound(
     "https://storage.googleapis.com/new-music/monster-roar-02-102957%20(1).mp3",
     0.8
@@ -28,9 +30,10 @@ const Particle = ({ start, direction, enemies, onCollision, onRemove }) => {
       if (distance < 1) {
         console.log(`Hit Enemy ID: ${enemy.id}`);
 
+        // Trigger scream sound only once per collision
         if (!enemy.isHit) {
           enemy.isHit = true; // Mark enemy as hit
-           // Play scream sound
+          playAttackScream();
         }
 
         // Trigger the 'die' animation for the enemy
@@ -48,6 +51,7 @@ const Particle = ({ start, direction, enemies, onCollision, onRemove }) => {
 
   return (
     <mesh ref={ref} position={start}>
+      {/* Use a small sphere to visualize the particle */}
       <sphereGeometry args={[0.1, 8, 8]} />
       <meshBasicMaterial color="red" />
     </mesh>

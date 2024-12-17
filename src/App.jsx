@@ -11,22 +11,30 @@ const App = () => {
   const [kills, setKills] = useState(0);
   const [enemyHealth, setEnemyHealth] = useState(100);
 
+  // Handle player getting hit
   const handlePlayerHit = () => {
     setPlayerHealth((prev) => Math.max(prev - 20, 0)); // Reduce health by 20
   };
 
+  // Handle ammo usage
   const handleAmmoUsage = () => {
     setAmmo((prev) => (prev > 0 ? prev - 1 : 0)); // Decrease ammo by 1
   };
 
+  // Unified enemy hit and death handler
   const handleEnemyHit = () => {
-    setEnemyHealth((prev) => Math.max(prev - 40, 0)); // Reduce enemy health by 40
-    if (enemyHealth - 40 <= 0) {
-      setKills((prev) => prev + 1); // Increment kills when enemy health reaches 0
-      setEnemyHealth(100); // Reset enemy health for the next enemy
-    }
+    setEnemyHealth((prev) => {
+      const newHealth = Math.max(prev - 40, 0); // Reduce enemy health by 40
+      if (newHealth <= 0) {
+        console.log("Enemy defeated!");
+        setKills((prevKills) => prevKills + 1); // Increment kill count
+        return 100; // Reset enemy health for the next enemy
+      }
+      return newHealth;
+    });
   };
 
+  // Reset game state
   const resetGame = () => {
     setPlayerHealth(100);
     setAmmo(9);
