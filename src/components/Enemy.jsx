@@ -18,19 +18,24 @@ const Enemy = ({
 
   const ref = useRef();
   const mixer = useRef(null);
-  const boundingBox = useRef(new THREE.Box3());
   const actions = useRef({});
   const hitCount = useRef(0);
   const isDead = useRef(false);
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const attackCooldown = useRef(false);
-  const currentAnimation = useRef("idle");
-
-  const randomTarget = useRef(new THREE.Vector3());
-  const behaviorTimer = useRef(0); // Timer for random behavior switch
-  const randomWalkTime = useRef(3 + Math.random() * 2); // 3-5 seconds for walk duration
-  const isWalking = useRef(false);
-
+  const currentAnimation = useRef("");
+  const minimumAttackDistance = 3;
+  const bufferDistance = 2.5; // Prevents too-close attacks
+  const deathHandled = useRef(false);
+  const shouldPlayGrunt = useRef(false);
+  const BOUNDARY = {
+    minX: -50,
+    maxX: 50,
+    minZ: -50,
+    maxZ: 50,
+  };
+  const randomDirection = new THREE.Vector3();
+  // Sounds
   const playGrunt = useSound(
     "https://storage.googleapis.com/new-music/bigfoot-grunt-233699.mp3"
   );
@@ -40,34 +45,55 @@ const Enemy = ({
 
   useEffect(() => {
     mixer.current = new THREE.AnimationMixer(scene);
+  
     animations.forEach((clip) => {
-      actions.current[clip.name.toLowerCase()] = mixer.current.clipAction(
-        clip,
-        ref.current
-      );
+      actions.current[clip.name.toLowerCase()] = mixer.current.clipAction(clip, ref.current);
     });
-
-    generateRandomTarget();
+  
+    console.log("Available animations:", Object.keys(actions.current)); // Debugging
+  
+    if (actions.current["run"]) {
+      playAnimation("run");
+    } else {
+      console.warn("No 'idle' animation found!");
+    }
+  
     resetState();
     return () => mixer.current?.stopAllAction();
   }, [animations, scene]);
 
   const resetState = () => {
-    hitCount.current = 0;
     isDead.current = false;
+    deathHandled.current = false;
+    hitCount.current = 0;
     velocity.current.set(0, 0, 0);
+  
+    // Ensure Bigfoot spawns some distance away from the player
     if (ref.current) {
-      ref.current.position.set(...position);
+      const spawnOffset = new THREE.Vector3(
+        Math.random() * 10 - 5, // Random x offset
+        0,
+        Math.random() * 10 + 5 // Random z offset in front of the player
+      );
+      const spawnPosition = new THREE.Vector3(...playerPosition).add(spawnOffset);
+      ref.current.position.copy(spawnPosition);
+      ref.current.userData.gruntPlayed = false;
+      ref.current.userData.isHit = false;
     }
-    playAnimation("idle");
+  
+    playAnimation("run"); 
   };
-
-  const generateRandomTarget = () => {
-    const range = 10;
-    const x = position[0] + (Math.random() * range - range / 2);
-    const z = position[2] + (Math.random() * range - range / 2);
-    randomTarget.current.set(x, 0, z);
-  };
+  useEffect(() => {
+    // Play grunt sound every 30 seconds
+    const gruntInterval = setInterval(() => {
+      if (!isDead.current && velocity.current.length() === 0) {
+        playGrunt();
+        console.log("Bigfoot makes a grunt sound!");
+      }
+    }, 30000); // 30,000 ms = 30 seconds
+  
+    return () => clearInterval(gruntInterval); // Cleanup interval on unmount
+  }, [playGrunt]);
 
   const playAnimation = (name) => {
     if (currentAnimation.current === name || !actions.current[name]) return;
@@ -77,125 +103,119 @@ const Enemy = ({
     currentAnimation.current = name;
   };
 
-  const handleHit = () => {
-    if (isDead.current) return;
-
-    hitCount.current += 1;
-
-    if (hitCount.current >= 3) {
-      isDead.current = true;
-      playAnimation("die");
-      playDeathRoar();
-
-      const dieAction = actions.current["die"];
-      if (dieAction) {
-        dieAction.setLoop(THREE.LoopOnce, 1);
-        dieAction.clampWhenFinished = true;
-
-        dieAction.reset().play();
-        mixer.current.addEventListener("finished", (e) => {
-          if (e.action === dieAction) {
-            onDeath(id);
-            resetState();
-          }
-        });
-      } else {
-        onDeath(id);
-        resetState();
-      }
-    }
-  };
-
   useFrame((_, delta) => {
-    if (!mixer.current || !ref.current) return;
+    if (!ref.current || !mixer.current) return;
+  
     mixer.current.update(delta);
-
+  
     if (isDead.current) {
       velocity.current.set(0, 0, 0);
-      return;
+      return; // Stop all movement and animations if dead
     }
-
+  
     const playerPos = new THREE.Vector3(...playerPosition);
     const distanceToPlayer = ref.current.position.distanceTo(playerPos);
-
-    // ATTACK LOGIC
-    if (distanceToPlayer < 3 && !attackCooldown.current) {
-      attackCooldown.current = true;
-      velocity.current.set(0, 0, 0);
-      playAnimation("attack");
-      playGrunt();
-
-      setTimeout(() => {
-        attackCooldown.current = false;
-        if (!isDead.current) playAnimation("run");
-      }, 1500);
-
-      onPlayerHit(id);
+  
+    // ATTACK LOGIC: Engage player
+    if (distanceToPlayer < minimumAttackDistance) {
+      velocity.current.set(0, 0, 0); // Stop movement
+      if (!attackCooldown.current) {
+        attackCooldown.current = true;
+  
+        playAnimation("attack");
+        onPlayerHit();
+  
+        setTimeout(() => {
+          attackCooldown.current = false;
+          if (!isDead.current) playAnimation("run");
+        }, 1500);
+      }
       return;
     }
-
-    // RUN LOGIC
+  
+    // RUN LOGIC: Chase player when close enough
     if (distanceToPlayer < 12) {
       const direction = playerPos.clone().sub(ref.current.position).normalize();
-      velocity.current.lerp(direction.multiplyScalar(3), 0.1);
+      velocity.current.copy(direction.multiplyScalar(3)); // Move toward player
+      playAnimation("run");
+    } else {
+      // WANDER LOGIC: Random movement
+      if (velocity.current.length() === 0 || Math.random() < 0.01) {
+        randomDirection.set(
+          Math.random() * 2 - 1,
+          0,
+          Math.random() * 2 - 1
+        ).normalize();
+        velocity.current.copy(randomDirection.multiplyScalar(2)); // Adjust wandering speed
+      }
       playAnimation("run");
     }
-    // RANDOM WALK AND IDLE LOGIC
-    else {
-      behaviorTimer.current += delta;
-
-      if (isWalking.current) {
-        const direction = randomTarget.current
-          .clone()
-          .sub(ref.current.position)
-          .normalize();
-        velocity.current.lerp(direction.multiplyScalar(1), 0.05);
-
-        if (ref.current.position.distanceTo(randomTarget.current) < 0.5) {
-          generateRandomTarget();
-        }
-
-        if (behaviorTimer.current > randomWalkTime.current) {
-          isWalking.current = false;
-          behaviorTimer.current = 0;
-          playAnimation("idle");
-        } else {
-          playAnimation("walk");
-        }
-      } else {
-        velocity.current.set(0, 0, 0);
-
-        if (behaviorTimer.current > 3) {
-          isWalking.current = true;
-          behaviorTimer.current = 0;
-          randomWalkTime.current = 3 + Math.random() * 2; // New random duration
-          generateRandomTarget();
-        }
-        playAnimation("idle");
-      }
-    }
-
-    // MOVE SMOOTHLY
+  
+    // APPLY MOVEMENT
     const moveVector = velocity.current.clone().multiplyScalar(delta);
     ref.current.position.add(moveVector);
-
-    // FACE TARGET (PLAYER OR RANDOM POSITION)
-    const targetDirection = velocity.current.clone().normalize();
-    const angle = Math.atan2(targetDirection.x, targetDirection.z);
+  
+    // BOUNDARY LOGIC: Keep Bigfoot inside the world
+    if (ref.current.position.x < BOUNDARY.minX) {
+      ref.current.position.x = BOUNDARY.minX + 1; // Reset position
+      velocity.current.x = Math.abs(velocity.current.x); // Move right
+    }
+    if (ref.current.position.x > BOUNDARY.maxX) {
+      ref.current.position.x = BOUNDARY.maxX - 1; // Reset position
+      velocity.current.x = -Math.abs(velocity.current.x); // Move left
+    }
+    if (ref.current.position.z < BOUNDARY.minZ) {
+      ref.current.position.z = BOUNDARY.minZ + 1; // Reset position
+      velocity.current.z = Math.abs(velocity.current.z); // Move forward
+    }
+    if (ref.current.position.z > BOUNDARY.maxZ) {
+      ref.current.position.z = BOUNDARY.maxZ - 1; // Reset position
+      velocity.current.z = -Math.abs(velocity.current.z); // Move backward
+    }
+  
+    // ROTATE TO FACE MOVEMENT DIRECTION
     if (velocity.current.length() > 0) {
+      const angle = Math.atan2(velocity.current.x, velocity.current.z);
       ref.current.rotation.y = THREE.MathUtils.lerp(
         ref.current.rotation.y,
         angle,
         0.1
       );
     }
-
-    // UPDATE BOUNDING BOX
-    boundingBox.current.setFromObject(ref.current);
-    setBoundingBox(boundingBox.current);
   });
+  const handleHit = () => {
+    if (isDead.current) return; // Prevent further hits if already dead
+  
+    hitCount.current += 1;
+  
+    if (hitCount.current >= 3) {
+      isDead.current = true; // Mark as dead
+      velocity.current.set(0, 0, 0); // Stop all movement
+  
+      playAnimation("die");
+      playDeathRoar();
+  
+      const dieAction = actions.current["die"];
+      if (dieAction) {
+        dieAction.setLoop(THREE.LoopOnce, 1);
+        dieAction.clampWhenFinished = true;
+  
+        dieAction.play();
+        mixer.current.addEventListener("finished", (e) => {
+          if (e.action === dieAction) {
+            onDeath(id); // Notify parent component about kill
+            resetState(); // Respawn logic
+          }
+        });
+      } else {
+        onDeath(id); // If no die animation, reset immediately
+        resetState();
+      }
+    }
+  };
+  
 
-  return (
+return (
     <primitive
       ref={ref}
       object={scene}

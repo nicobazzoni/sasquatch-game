@@ -21,7 +21,12 @@ const Scene = ({
   const playerRef = useRef();
   const keys = useRef({ w: false, a: false, s: false, d: false });
   const maxEnemies = 5;
-
+  const [floorBoundary, setFloorBoundary] = useState({
+    minX: -50,
+    maxX: 50,
+    minZ: -50,
+    maxZ: 50,
+  });
   // Initialize enemies
   useEffect(() => {
     const initialEnemies = Array.from({ length: maxEnemies }).map(() => ({
@@ -111,7 +116,7 @@ const Scene = ({
       </mesh>
 
       {/* Floor */}
-      <Floor />
+      <Floor setFloorBoundary={setFloorBoundary} />
 
       {/* Render Enemies */}
       {enemies.map((enemy) =>
@@ -119,6 +124,7 @@ const Scene = ({
           <Enemy
             key={enemy.id}
             id={enemy.id}
+            boundary={floorBoundary}
             position={enemy.position}
             setBoundingBox={(boundingBox) =>
               setEnemies((prev) =>
