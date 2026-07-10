@@ -1,68 +1,83 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { PointerLockControls } from "@react-three/drei";
 import Scene from "./components/Scene";
-import Floor from "./components/Floor";
 import useSound from "./components/useSound";
-import { GameProvider } from "./GameContext";
+import "./App.css";
+
 const App = () => {
-  const [gameStarted, setGameStarted] = useState(false); // Track user interaction
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameVersion, setGameVersion] = useState(0);
   const [playerHealth, setPlayerHealth] = useState(100);
   const [ammo, setAmmo] = useState(9);
   const [kills, setKills] = useState(0);
-  const [enemyHealth, setEnemyHealth] = useState(100);
-  const [deathCount, setDeathCount] = useState(0);
+  const [slashFlash, setSlashFlash] = useState(0);
+  const [showGameOver, setShowGameOver] = useState(false);
+  const gameOver = playerHealth <= 0;
+
+  useEffect(() => {
+    if (!gameOver) {
+      setShowGameOver(false);
+      return undefined;
+    }
+
+    const gameOverTimeout = window.setTimeout(() => {
+      setShowGameOver(true);
+    }, 850);
+
+    return () => window.clearTimeout(gameOverTimeout);
+  }, [gameOver]);
 
   const handleEnemyDeath = () => {
-    setKills((prev) => {
-      console.log("Kill registered! Previous kills:", prev);
-      return prev + 1;
-    });
-  };
-  const handlePlayerHit = () => setPlayerHealth((prev) => Math.max(prev - 20, 0));
-  const handleAmmoUsage = () => setAmmo((prev) => (prev > 0 ? prev - 1 : 0));
-  
-  const handleEnemyHit = () => {
-    setEnemyHealth((prev) => {
-      const newHealth = Math.max(prev - 40, 0);
-      if (newHealth <= 0) {
-        setKills((prevKills) => prevKills + 1);
-        return 100;
-      }
-      return newHealth;
-    });
+    setKills((prev) => prev + 1);
   };
 
-  
+  const handlePlayerHit = (damage = 100) => {
+    setSlashFlash((prev) => prev + 1);
+    setPlayerHealth((prev) => Math.max(prev - damage, 0));
+  };
+
+  const handleAmmoUsage = () => {
+    if (gameOver) return;
+    setAmmo((prev) => (prev > 0 ? prev - 1 : 0));
+  };
+
+  const handleReloadComplete = () => {
+    if (gameOver) return;
+    setAmmo(9);
+  };
 
   const resetGame = () => {
     setPlayerHealth(100);
     setAmmo(9);
     setKills(0);
-    setEnemyHealth(100);
+    setShowGameOver(false);
+    setGameStarted(true);
+    setGameVersion((prev) => prev + 1);
   };
 
   const playBackgroundMusic = useSound(
-    "https://storage.googleapis.com/new-music/Synths_Loops_5_DarkCorridorsFullMix82_Am.wav"
+    "https://storage.googleapis.com/new-music/Synths_Loops_5_DarkCorridorsFullMix82_Am.wav",
+    true,
+    0.35,
   );
 
-  const playEnvironmentSound = useSound(
-  "https://storage.googleapis.com/new-music/winter_forest.glb"
-  )
-  // Start music after game starts);
   const startGame = () => {
     setGameStarted(true);
+    setGameVersion((prev) => prev + 1);
     playBackgroundMusic();
-   
   };
 
-  useEffect(() => {
-    playEnvironmentSound(); // Play sound on game start
-  }, [playEnvironmentSound]);
-
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <div
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        overflow: "hidden",
+      }}
+    >
       {!gameStarted && (
         <div
           style={{
@@ -96,7 +111,43 @@ const App = () => {
         </div>
       )}
 
-      {/* Stats Section */}
+      {showGameOver && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1001,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "24px",
+            backgroundColor: "rgba(0, 0, 0, 0.78)",
+            color: "white",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: "64px", fontWeight: 900, color: "#ff3333" }}>
+            GAME OVER
+          </div>
+          <div style={{ fontSize: "22px" }}>Bigfoot got you.</div>
+          <button
+            onClick={resetGame}
+            style={{
+              padding: "16px 32px",
+              fontSize: "22px",
+              backgroundColor: "#2563eb",
+              color: "white",
+              border: "none",
+              borderRadius: "10px",
+              cursor: "pointer",
+            }}
+          >
+            Restart
+          </button>
+        </div>
+      )}
+
       <div
         style={{
           padding: "10px",
@@ -107,7 +158,6 @@ const App = () => {
         }}
       >
         <div>Player Health: {playerHealth}</div>
-        <div>Enemy Health: {enemyHealth}</div>
         <div>Ammo: {ammo}</div>
         <div>Kills: {kills}</div>
         <button
@@ -126,30 +176,23 @@ const App = () => {
         </button>
       </div>
 
-      {/* Game Canvas */}
-      <GameProvider>
       <Canvas camera={{ position: [0, 2, 5], fov: 75 }}>
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 10]} />
         <Scene
-          playerHealth={playerHealth}
-          setPlayerHealth={setPlayerHealth}
-          ammo={ammo}
-          setAmmo={setAmmo}
-          kills={kills}
-          setKills={setKills}
-          enemyHealth={enemyHealth}
-          setEnemyHealth={setEnemyHealth}
+          key={gameVersion}
+          gameOver={gameOver}
           handlePlayerHit={handlePlayerHit}
           handleAmmoUsage={handleAmmoUsage}
-          handleEnemyHit={handleEnemyHit}
           handleEnemyDeath={handleEnemyDeath}
+          handleReloadComplete={handleReloadComplete}
         />
-        <Floor />
-        <PointerLockControls />
-
+        <PointerLockControls enabled={!showGameOver} />
       </Canvas>
-      </GameProvider>
+
+      {slashFlash > 0 && (
+        <div key={slashFlash} className="slash-overlay" aria-hidden="true" />
+      )}
     </div>
   );
 };

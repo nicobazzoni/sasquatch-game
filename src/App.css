@@ -17,6 +17,64 @@
   animation: fade-out 0.5s ease-out forwards;
 }
 
+.slash-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1002;
+  pointer-events: none;
+  overflow: hidden;
+  animation: slash-flash 420ms ease-out forwards;
+}
+
+.slash-overlay::before,
+.slash-overlay::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(92vw, 980px);
+  height: 18px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.15) 10%,
+      rgba(255, 20, 20, 0.95) 45%,
+      rgba(120, 0, 0, 0.92) 72%,
+      transparent 100%
+    );
+  box-shadow:
+    0 0 18px rgba(255, 0, 0, 0.75),
+    0 0 44px rgba(255, 0, 0, 0.45);
+  transform-origin: center;
+}
+
+.slash-overlay::before {
+  transform: translate(-50%, -50%) rotate(-24deg);
+}
+
+.slash-overlay::after {
+  height: 10px;
+  opacity: 0.75;
+  transform: translate(-50%, calc(-50% + 82px)) rotate(-24deg);
+}
+
+@keyframes slash-flash {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  18% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(7px);
+  }
+}
+
 @keyframes fade-out {
   0% {
     opacity: 1;

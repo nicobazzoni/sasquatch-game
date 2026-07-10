@@ -1,120 +1,148 @@
-import React, { useRef, useEffect, useState } from "react";
-import { useThree } from "@react-three/fiber";
+import React, { useRef, useEffect } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import useSound from "./useSound";
 import * as THREE from "three";
 
-import { useFrame } from "@react-three/fiber";
+const MAGAZINE_SIZE = 9;
+const RELOAD_DURATION_MS = 1150;
 
-const Weapon = ({ onFire }) => {
+const playReloadSound = () => {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+
+  const context = new AudioContext();
+  const now = context.currentTime;
+
+  const playClick = (startTime, frequency, duration, volume) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = "square";
+    oscillator.frequency.setValueAtTime(frequency, startTime);
+    gain.gain.setValueAtTime(volume, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration);
+  };
+
+  playClick(now, 180, 0.06, 0.08);
+  playClick(now + 0.18, 520, 0.045, 0.05);
+  playClick(now + 0.42, 260, 0.07, 0.075);
+
+  window.setTimeout(() => context.close(), 900);
+};
+
+const Weapon = ({ onFire, onReloadComplete }) => {
   const { camera, scene } = useThree();
   const weaponRef = useRef();
-  const mixerRef = useRef(); // Reference for the AnimationMixer
-  const shotCountRef = useRef(0); // Track the number of shots
-  const [hasPlayedAnimation, setHasPlayedAnimation] = useState(false); // Prevent multiple plays
-  const [isAnimationPlaying, setIsAnimationPlaying] = useState(false);
+  const mixerRef = useRef();
+  const shotCountRef = useRef(0);
+  const isReloadingRef = useRef(false);
+  const reloadTimeoutRef = useRef(null);
+  const onFireRef = useRef(onFire);
+  const onReloadCompleteRef = useRef(onReloadComplete);
   const { scene: weaponModel, animations } = useGLTF(
-    "https://storage.googleapis.com/new-music/c7_prototype_pistol.glb"
+    "https://storage.googleapis.com/new-music/c7_prototype_pistol.glb",
   );
 
   const playGunshotSound = useSound(
-    "https://storage.googleapis.com/new-music/GunshotMachineGun_BW.56657.wav"
+    "https://storage.googleapis.com/new-music/GunshotMachineGun_BW.56657.wav",
+    false,
+    0.65,
   );
 
+  useEffect(() => {
+    onFireRef.current = onFire;
+    onReloadCompleteRef.current = onReloadComplete;
+  }, [onFire, onReloadComplete]);
+
+  const finishReload = () => {
+    shotCountRef.current = 0;
+    isReloadingRef.current = false;
+    onReloadCompleteRef.current?.();
+  };
+
+  const startReload = () => {
+    if (isReloadingRef.current) return;
+
+    playReloadSound();
+    isReloadingRef.current = true;
+
+    const reloadAnimation = animations?.find((clip) => clip.name === "test");
+
+    if (reloadAnimation && mixerRef.current) {
+      const action = mixerRef.current.clipAction(reloadAnimation);
+      action.setLoop(THREE.LoopOnce);
+      action.clampWhenFinished = true;
+      action.reset().play();
+
+      const onAnimationFinish = (event) => {
+        if (event.action === action) {
+          finishReload();
+          mixerRef.current.removeEventListener("finished", onAnimationFinish);
+        }
+      };
+
+      mixerRef.current.addEventListener("finished", onAnimationFinish);
+      return;
+    }
+
+    reloadTimeoutRef.current = window.setTimeout(finishReload, RELOAD_DURATION_MS);
+  };
+
   const handleFire = () => {
-    if (isAnimationPlaying) return; // Prevent firing during animation
-  
+    if (isReloadingRef.current) return;
+
     const direction = new THREE.Vector3();
     camera.getWorldDirection(direction);
-  
-    const start = weaponRef.current
-      ? weaponRef.current.getWorldPosition(new THREE.Vector3())
-      : camera.position.clone();
-  
-    onFire(start, direction);
-    playGunshotSound();
-  
-    shotCountRef.current += 1;
-    console.log(`Shots fired: ${shotCountRef.current}`);
-  
-    if (shotCountRef.current === 9) {
 
-  
-      if (animations && animations.length > 0) {
-        const testAnimation = animations.find((clip) => clip.name === "test");
-  
-        if (testAnimation) {
-          console.log("Playing 'test' weapon animation after 9 shots:", testAnimation.name);
-  
-          const action = mixerRef.current.clipAction(testAnimation);
-          action.setLoop(THREE.LoopOnce);
-          action.clampWhenFinished = true;
-          action.reset().play();
-  
-          setIsAnimationPlaying(true); // Lock firing during animation
-  
-          const onAnimationFinish = (event) => {
-            if (event.action === action) {
-              shotCountRef.current = 0; // Reset the shot count
-              console.log("Resetting shot count after animation finishes.");
-              setIsAnimationPlaying(false); // Unlock firing
-              mixerRef.current.removeEventListener("finished", onAnimationFinish);
-            }
-          };
-  
-          mixerRef.current.addEventListener("finished", onAnimationFinish);
-        } else {
-          console.log("No animation named 'test' found.");
-        }
-      }
+    const start = camera.position
+      .clone()
+      .add(direction.clone().multiplyScalar(0.35));
+
+    onFireRef.current?.(start, direction);
+    playGunshotSound({ restart: true });
+
+    shotCountRef.current += 1;
+
+    if (shotCountRef.current >= MAGAZINE_SIZE) {
+      startReload();
     }
   };
 
   useEffect(() => {
-    // Attach the weapon model to the camera
     camera.add(weaponModel);
-    scene.add(camera); // Ensure the camera and weapon are part of the scene
+    scene.add(camera);
     weaponRef.current = weaponModel;
 
-    // Initialize the AnimationMixer
     if (animations && animations.length > 0) {
       mixerRef.current = new THREE.AnimationMixer(weaponModel);
     }
 
-    weaponModel.scale.set(0.010, 0.010, 0.010); // Scale down the weapon
+    weaponModel.scale.set(0.010, 0.010, 0.010);
+    weaponModel.position.set(0.2, -0.2, -1);
+    weaponModel.rotation.set(0, Math.PI, 0);
 
-    // Attach fire event to mouse click
     window.addEventListener("click", handleFire);
 
-    // Log available animations
-    if (animations && animations.length > 0) {
-      console.log("Weapon Animations Available:", animations.map((clip) => clip.name));
-    } else {
-      console.log("No animations found for the weapon.");
-    }
-
     return () => {
+      if (reloadTimeoutRef.current) window.clearTimeout(reloadTimeoutRef.current);
       window.removeEventListener("click", handleFire);
-      camera.remove(weaponModel); // Clean up on unmount
+      camera.remove(weaponModel);
     };
   }, [camera, weaponModel, scene, animations]);
 
-  // Update AnimationMixer on each frame
   useFrame((_, delta) => {
     if (mixerRef.current) {
       mixerRef.current.update(delta);
     }
   });
 
-  // Position the weapon relative to the camera
-  useEffect(() => {
-    if (weaponRef.current) {
-      weaponRef.current.position.set(0.2, -0.2, -1); // Adjust these values for weapon placement
-      weaponRef.current.rotation.set(0, Math.PI, 0); // Face forward
-    }
-  }, [weaponRef]);
-
-  return null; // No visible representation needed
+  return null;
 };
 
 export default Weapon;
