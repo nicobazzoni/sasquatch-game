@@ -38,15 +38,23 @@ const playReloadSound = () => {
 
 };
 
-const Weapon = ({ onFire, onReloadComplete }) => {
+const Weapon = ({
+  enabled = false,
+  onFire,
+  onReloadComplete,
+  onReloadStateChange,
+}) => {
   const { camera, scene } = useThree();
   const weaponRef = useRef();
   const mixerRef = useRef();
   const shotCountRef = useRef(0);
   const isReloadingRef = useRef(false);
   const reloadTimeoutRef = useRef(null);
+  const recoilRef = useRef(0);
+  const enabledRef = useRef(enabled);
   const onFireRef = useRef(onFire);
   const onReloadCompleteRef = useRef(onReloadComplete);
+  const onReloadStateChangeRef = useRef(onReloadStateChange);
   const { scene: weaponModel, animations } = useGLTF(
     "https://storage.googleapis.com/new-music/c7_prototype_pistol.glb",
   );
@@ -61,19 +69,23 @@ const Weapon = ({ onFire, onReloadComplete }) => {
   useEffect(() => {
     onFireRef.current = onFire;
     onReloadCompleteRef.current = onReloadComplete;
-  }, [onFire, onReloadComplete]);
+    onReloadStateChangeRef.current = onReloadStateChange;
+    enabledRef.current = enabled;
+  }, [enabled, onFire, onReloadComplete, onReloadStateChange]);
 
   const finishReload = () => {
     shotCountRef.current = 0;
     isReloadingRef.current = false;
+    onReloadStateChangeRef.current?.(false);
     onReloadCompleteRef.current?.();
   };
 
   const startReload = () => {
-    if (isReloadingRef.current) return;
+    if (isReloadingRef.current || shotCountRef.current === 0) return;
 
     playReloadSound();
     isReloadingRef.current = true;
+    onReloadStateChangeRef.current?.(true);
 
     const reloadAnimation = animations?.find((clip) => clip.name === "test");
 
@@ -97,8 +109,13 @@ const Weapon = ({ onFire, onReloadComplete }) => {
     reloadTimeoutRef.current = window.setTimeout(finishReload, RELOAD_DURATION_MS);
   };
 
-  const handleFire = () => {
-    if (isReloadingRef.current) return;
+  const handleFire = (event) => {
+    if (
+      event.button !== 0 ||
+      !enabledRef.current ||
+      isReloadingRef.current ||
+      !document.pointerLockElement
+    ) return;
 
     const direction = new THREE.Vector3();
     camera.getWorldDirection(direction);
@@ -109,12 +126,18 @@ const Weapon = ({ onFire, onReloadComplete }) => {
 
     onFireRef.current?.(start, direction);
     playGunshotSound({ restart: true });
+    recoilRef.current = Math.min(recoilRef.current + 0.085, 0.16);
+    camera.rotateX(THREE.MathUtils.randFloat(0.012, 0.022));
 
     shotCountRef.current += 1;
 
     if (shotCountRef.current >= MAGAZINE_SIZE) {
       startReload();
     }
+  };
+
+  const handleReloadKey = (event) => {
+    if (event.code === "KeyR" && enabledRef.current) startReload();
   };
 
   useEffect(() => {
@@ -130,18 +153,33 @@ const Weapon = ({ onFire, onReloadComplete }) => {
     weaponModel.position.set(0.2, -0.2, -1);
     weaponModel.rotation.set(0, Math.PI, 0);
 
-    window.addEventListener("click", handleFire);
+    window.addEventListener("mousedown", handleFire);
+    window.addEventListener("keydown", handleReloadKey);
 
     return () => {
       if (reloadTimeoutRef.current) window.clearTimeout(reloadTimeoutRef.current);
-      window.removeEventListener("click", handleFire);
+      window.removeEventListener("mousedown", handleFire);
+      window.removeEventListener("keydown", handleReloadKey);
       camera.remove(weaponModel);
+      onReloadStateChangeRef.current?.(false);
     };
   }, [camera, weaponModel, scene, animations]);
 
   useFrame((_, delta) => {
     if (mixerRef.current) {
       mixerRef.current.update(delta);
+    }
+
+    recoilRef.current = THREE.MathUtils.damp(recoilRef.current, 0, 16, delta);
+    if (weaponRef.current) {
+      weaponRef.current.position.z = -1 + recoilRef.current;
+      weaponRef.current.rotation.z = recoilRef.current * 0.16;
+    }
+
+    if (recoilRef.current > 0.002) {
+      const shake = recoilRef.current * 0.018;
+      camera.position.x += THREE.MathUtils.randFloatSpread(shake);
+      camera.position.y += THREE.MathUtils.randFloatSpread(shake);
     }
   });
 

@@ -8,8 +8,6 @@ import useSound from "./useSound";
 const SAFE_EDGE_PADDING = 1.5;
 const DETECT_DISTANCE = 18;
 const ATTACK_DISTANCE = 3;
-const ATTACK_COOLDOWN_MS = 1650;
-const ATTACK_HIT_DELAY_MS = 900;
 const CHASE_SPEED = 3.2;
 const WANDER_SPEED = 1.4;
 const MIN_DEATH_DISPLAY_MS = 2200;
@@ -34,9 +32,12 @@ const Enemy = ({
   position,
   boundary,
   setBoundingBox,
-  playerPosition,
+  playerRef,
   isDead = false,
-  canAttack = true,
+  canAttackAt = 0,
+  speedMultiplier = 1,
+  attackCooldownMs = 1650,
+  attackHitDelayMs = 900,
   gameOver = false,
   onAttackPlayer = () => {},
   onDeathAnimationComplete = () => {},
@@ -53,7 +54,6 @@ const Enemy = ({
   const attackCooldown = useRef(false);
   const attackHitTimeout = useRef(null);
   const attackResetTimeout = useRef(null);
-  const playerPositionRef = useRef(playerPosition);
   const isDeadRef = useRef(isDead);
   const gameOverRef = useRef(gameOver);
   const currentAnimation = useRef("");
@@ -74,10 +74,9 @@ const Enemy = ({
   );
 
   useEffect(() => {
-    playerPositionRef.current = playerPosition;
     isDeadRef.current = isDead;
     gameOverRef.current = gameOver;
-  }, [gameOver, isDead, playerPosition]);
+  }, [gameOver, isDead]);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -198,14 +197,15 @@ const Enemy = ({
       return;
     }
 
-    const playerPos = new THREE.Vector3(...playerPosition);
+    const playerPos = playerRef.current?.position.clone();
+    if (!playerPos) return;
     const enemyPos = ref.current.position;
     const distanceToPlayer = enemyPos.distanceTo(playerPos);
 
     if (distanceToPlayer < ATTACK_DISTANCE) {
       velocity.current.set(0, 0, 0);
 
-      if (canAttack && !attackCooldown.current) {
+      if (performance.now() >= canAttackAt && !attackCooldown.current) {
         attackCooldown.current = true;
         playAnimation("attack");
         playGrunt({ restart: true });
@@ -213,32 +213,35 @@ const Enemy = ({
         attackHitTimeout.current = window.setTimeout(() => {
           if (!ref.current || isDeadRef.current || gameOverRef.current) return;
 
-          const latestPlayerPos = new THREE.Vector3(...playerPositionRef.current);
+          const latestPlayerPos = playerRef.current?.position;
+          if (!latestPlayerPos) return;
           const latestDistance = ref.current.position.distanceTo(latestPlayerPos);
 
           if (latestDistance < ATTACK_DISTANCE + 0.45) {
             onAttackPlayer();
           }
-        }, ATTACK_HIT_DELAY_MS);
+        }, attackHitDelayMs);
 
         attackResetTimeout.current = window.setTimeout(() => {
           if (isDeadRef.current || gameOverRef.current) return;
           attackCooldown.current = false;
           playAnimation("run");
-        }, ATTACK_COOLDOWN_MS);
+        }, attackCooldownMs);
       }
     } else if (distanceToPlayer < DETECT_DISTANCE) {
       const direction = playerPos.sub(enemyPos);
       direction.y = 0;
       direction.normalize();
-      velocity.current.copy(direction.multiplyScalar(CHASE_SPEED));
+      velocity.current.copy(direction.multiplyScalar(CHASE_SPEED * speedMultiplier));
       playAnimation("run");
     } else {
       if (velocity.current.lengthSq() === 0 || Math.random() < 0.015) {
         randomDirection.current
           .set(Math.random() * 2 - 1, 0, Math.random() * 2 - 1)
           .normalize();
-        velocity.current.copy(randomDirection.current.multiplyScalar(WANDER_SPEED));
+        velocity.current.copy(
+          randomDirection.current.multiplyScalar(WANDER_SPEED * speedMultiplier),
+        );
       }
       playAnimation("run");
     }

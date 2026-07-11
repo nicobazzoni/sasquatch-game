@@ -13,8 +13,12 @@ const App = () => {
   const [ammo, setAmmo] = useState(9);
   const [kills, setKills] = useState(0);
   const [slashFlash, setSlashFlash] = useState(0);
+  const [shotFlash, setShotFlash] = useState(0);
+  const [isPointerLocked, setIsPointerLocked] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
   const [showGameOver, setShowGameOver] = useState(false);
   const gameOver = playerHealth <= 0;
+  const threatLevel = kills >= 10 ? "HUNTED" : kills >= 6 ? "SEVERE" : kills >= 3 ? "HIGH" : "LOW";
 
   useEffect(() => {
     if (gameOver) {
@@ -59,6 +63,8 @@ const App = () => {
     setAmmo(9);
     setKills(0);
     setShowGameOver(false);
+    setIsPointerLocked(false);
+    setIsReloading(false);
     setGameStarted(true);
     setGameVersion((prev) => prev + 1);
   };
@@ -166,7 +172,9 @@ const App = () => {
       >
         <div>Player Health: {playerHealth}</div>
         <div>Ammo: {ammo}</div>
+        <div>{isReloading ? "Reloading..." : "R to Reload"}</div>
         <div>Kills: {kills}</div>
+        <div>Threat: {threatLevel}</div>
         <button
           onClick={resetGame}
           style={{
@@ -183,7 +191,7 @@ const App = () => {
         </button>
       </div>
 
-      <Canvas camera={{ position: [0, 2, 5], fov: 75 }}>
+      <Canvas id="game-canvas" camera={{ position: [0, 2, 5], fov: 75 }}>
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 10]} />
         <Scene
@@ -193,12 +201,35 @@ const App = () => {
           handleAmmoUsage={handleAmmoUsage}
           handleEnemyDeath={handleEnemyDeath}
           handleReloadComplete={handleReloadComplete}
+          inputEnabled={isPointerLocked && !gameOver}
+          onReloadStateChange={setIsReloading}
+          onWeaponFire={() => setShotFlash((prev) => prev + 1)}
+          kills={kills}
         />
         <PointerLockControls
           ref={pointerLockControlsRef}
           enabled={!gameOver}
+          selector="#game-canvas"
+          onLock={() => setIsPointerLocked(true)}
+          onUnlock={() => setIsPointerLocked(false)}
         />
       </Canvas>
+
+      {gameStarted && !gameOver && (
+        <>
+          <div className={`crosshair ${isReloading ? "crosshair--reloading" : ""}`}>
+            <span />
+            <span />
+          </div>
+          {!isPointerLocked && (
+            <div className="aim-prompt">Click the game to aim</div>
+          )}
+        </>
+      )}
+
+      {shotFlash > 0 && (
+        <div key={shotFlash} className="muzzle-flash" aria-hidden="true" />
+      )}
 
       {slashFlash > 0 && (
         <div key={slashFlash} className="slash-overlay" aria-hidden="true" />

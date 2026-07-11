@@ -11,17 +11,59 @@ import { v4 as uuidv4 } from "uuid";
 const PLAYER_START = [0, 0.5, 0];
 const PLAYER_EYE_HEIGHT = 1.6;
 const PLAYER_SPEED = 0.16;
-const ENEMY_START_HEALTH = 100;
 const BULLET_DAMAGE = 40;
 const BULLET_RANGE = 90;
 const ENEMY_HIT_RADIUS = 2.6;
 const ENEMY_HIT_HEIGHT = 6;
 const SAFE_EDGE_PADDING = 1.5;
-const ENEMY_ATTACK_DAMAGE = 34;
 const ENEMY_SPAWN_MIN_DISTANCE = 18;
 const ENEMY_SPAWN_MAX_DISTANCE = 28;
-const ENEMY_RESPAWN_DELAY_MS = 1800;
 const PLAYER_ASSESSMENT_GRACE_MS = 3500;
+
+const getDifficulty = (kills) => {
+  if (kills >= 10) {
+    return {
+      maxEnemies: 2,
+      health: 160,
+      speedMultiplier: 1.35,
+      attackCooldownMs: 1150,
+      attackHitDelayMs: 650,
+      attackDamage: 34,
+      respawnDelayMs: 1100,
+    };
+  }
+  if (kills >= 6) {
+    return {
+      maxEnemies: 1,
+      health: 140,
+      speedMultiplier: 1.25,
+      attackCooldownMs: 1300,
+      attackHitDelayMs: 750,
+      attackDamage: 38,
+      respawnDelayMs: 1400,
+    };
+  }
+  if (kills >= 3) {
+    return {
+      maxEnemies: 1,
+      health: 100,
+      speedMultiplier: 1.15,
+      attackCooldownMs: 1450,
+      attackHitDelayMs: 825,
+      attackDamage: 34,
+      respawnDelayMs: 1600,
+    };
+  }
+  return {
+    maxEnemies: 1,
+    health: 100,
+    speedMultiplier: 1,
+    attackCooldownMs: 1650,
+    attackHitDelayMs: 900,
+    attackDamage: 34,
+    respawnDelayMs: 1800,
+  };
+};
 
 const fallbackBoundary = {
   minX: -35,
@@ -75,6 +117,10 @@ const Scene = ({
   handleEnemyDeath,
   handleAmmoUsage,
   handleReloadComplete,
+  inputEnabled,
+  onReloadStateChange,
+  onWeaponFire,
+  kills,
 }) => {
   const [enemies, setEnemies] = useState([]);
   const [particles, setParticles] = useState([]);
@@ -82,15 +128,13 @@ const Scene = ({
   const playerRef = useRef();
   const keys = useRef({ w: false, a: false, s: false, d: false });
   const boundaryRef = useRef(fallbackBoundary);
+  const enemyRuntimeRef = useRef(new Map());
+  const difficulty = getDifficulty(kills);
   const playBulletHitGroan = useSound(
     "https://storage.googleapis.com/new-music/bigfoot-grunt-233699.mp3",
     false,
     0.8,
   );
-
-  // Keep this singular until the skinned model/AI loop is stable.
-  // Multiple enemies made the shared GLTF object bug much harder to reason about.
-  const maxEnemies = 1;
 
   const [floorBoundary, setFloorBoundary] = useState(fallbackBoundary);
 
@@ -115,9 +159,7 @@ const Scene = ({
     return {
       id: uuidv4(),
       position,
-      currentPosition: position,
-      health: ENEMY_START_HEALTH,
-      boundingBox: null,
+      health: difficulty.health,
       canAttackAt: performance.now() + PLAYER_ASSESSMENT_GRACE_MS,
       dead: false,
     };
@@ -128,8 +170,15 @@ const Scene = ({
   }, [floorBoundary]);
 
   useEffect(() => {
-    setEnemies(Array.from({ length: maxEnemies }).map(() => createEnemy()));
-  }, []);
+    setEnemies((prev) => {
+      if (prev.length >= difficulty.maxEnemies) return prev;
+      const amountToAdd = difficulty.maxEnemies - prev.length;
+      return [
+        ...prev,
+        ...Array.from({ length: amountToAdd }).map(() => createEnemy()),
+      ];
+    });
+  }, [difficulty.maxEnemies]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -177,22 +226,12 @@ const Scene = ({
   });
 
   const handleEnemyBoundingBox = (enemyId, boundingBox, currentPosition) => {
-    setEnemies((prev) =>
-      prev.map((enemy) =>
-        enemy.id === enemyId
-          ? {
-              ...enemy,
-              boundingBox,
-              currentPosition: currentPosition || enemy.currentPosition,
-            }
-          : enemy,
-      ),
-    );
+    enemyRuntimeRef.current.set(enemyId, { boundingBox, currentPosition });
   };
 
   const handleEnemyAttack = () => {
     if (gameOver) return;
-    handlePlayerHit(ENEMY_ATTACK_DAMAGE);
+    handlePlayerHit(difficulty.attackDamage);
   };
 
   const handleEnemyDeathAnimationComplete = (enemyId) => {
@@ -208,15 +247,14 @@ const Scene = ({
                 playerPosition: getPlayerPosition(),
                 playerForward: getPlayerForward(),
               }),
-              currentPosition: null,
-              health: ENEMY_START_HEALTH,
-              boundingBox: null,
+              health: difficulty.health,
               canAttackAt: performance.now() + PLAYER_ASSESSMENT_GRACE_MS,
               dead: false,
             }
           : enemy,
       ),
     );
+    enemyRuntimeRef.current.delete(enemyId);
   };
 
   const handleCollision = (enemyId) => {
@@ -243,7 +281,6 @@ const Scene = ({
           return {
             ...enemy,
             health: 0,
-            boundingBox: null,
             dead: true,
           };
         }
@@ -260,8 +297,9 @@ const Scene = ({
     enemies.forEach((enemy) => {
       if (enemy.dead) return;
 
+      const runtime = enemyRuntimeRef.current.get(enemy.id);
       const enemyPosition = new THREE.Vector3(
-        ...(enemy.currentPosition || enemy.position),
+        ...(runtime?.currentPosition || enemy.position),
       );
       const enemyBodyCenter = enemyPosition.clone();
       enemyBodyCenter.y += ENEMY_HIT_HEIGHT * 0.5;
@@ -305,27 +343,33 @@ const Scene = ({
           key={enemy.id}
           id={enemy.id}
           boundary={floorBoundary}
-          canAttack={!gameOver && performance.now() >= enemy.canAttackAt}
+          canAttackAt={enemy.canAttackAt}
           gameOver={gameOver}
           isDead={enemy.dead}
           position={enemy.position}
+          playerRef={playerRef}
+          speedMultiplier={difficulty.speedMultiplier}
+          attackCooldownMs={difficulty.attackCooldownMs}
+          attackHitDelayMs={difficulty.attackHitDelayMs}
           setBoundingBox={(boundingBox, currentPosition) =>
             handleEnemyBoundingBox(enemy.id, boundingBox, currentPosition)
           }
-          playerPosition={playerRef.current?.position.toArray() || PLAYER_START}
           onAttackPlayer={handleEnemyAttack}
           onDeathAnimationComplete={() =>
             window.setTimeout(
               () => handleEnemyDeathAnimationComplete(enemy.id),
-              ENEMY_RESPAWN_DELAY_MS,
+              difficulty.respawnDelayMs,
             )
           }
         />
       ))}
 
       <Weapon
+        enabled={inputEnabled && !gameOver}
+        onReloadStateChange={onReloadStateChange}
         onFire={(start, direction) => {
           if (gameOver) return;
+          onWeaponFire?.();
           setParticles((prev) => [...prev, { id: uuidv4(), start, direction }]);
           const hitEnemyId = getShotHitEnemyId(start, direction);
           if (hitEnemyId) handleCollision(hitEnemyId);
