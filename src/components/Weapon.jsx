@@ -6,12 +6,15 @@ import * as THREE from "three";
 
 const MAGAZINE_SIZE = 9;
 const RELOAD_DURATION_MS = 1150;
+let reloadAudioContext = null;
 
 const playReloadSound = () => {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) return;
 
-  const context = new AudioContext();
+  reloadAudioContext ??= new AudioContext();
+  const context = reloadAudioContext;
+  if (context.state === "suspended") context.resume();
   const now = context.currentTime;
 
   const playClick = (startTime, frequency, duration, volume) => {
@@ -33,7 +36,6 @@ const playReloadSound = () => {
   playClick(now + 0.18, 520, 0.045, 0.05);
   playClick(now + 0.42, 260, 0.07, 0.075);
 
-  window.setTimeout(() => context.close(), 900);
 };
 
 const Weapon = ({ onFire, onReloadComplete }) => {
@@ -53,6 +55,7 @@ const Weapon = ({ onFire, onReloadComplete }) => {
     "https://storage.googleapis.com/new-music/GunshotMachineGun_BW.56657.wav",
     false,
     0.65,
+    { poolSize: 4 },
   );
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { PointerLockControls } from "@react-three/drei";
 import Scene from "./components/Scene";
@@ -6,6 +6,7 @@ import useSound from "./components/useSound";
 import "./App.css";
 
 const App = () => {
+  const pointerLockControlsRef = useRef(null);
   const [gameStarted, setGameStarted] = useState(false);
   const [gameVersion, setGameVersion] = useState(0);
   const [playerHealth, setPlayerHealth] = useState(100);
@@ -14,6 +15,12 @@ const App = () => {
   const [slashFlash, setSlashFlash] = useState(0);
   const [showGameOver, setShowGameOver] = useState(false);
   const gameOver = playerHealth <= 0;
+
+  useEffect(() => {
+    if (gameOver) {
+      pointerLockControlsRef.current?.unlock();
+    }
+  }, [gameOver]);
 
   useEffect(() => {
     if (!gameOver) {
@@ -187,7 +194,10 @@ const App = () => {
           handleEnemyDeath={handleEnemyDeath}
           handleReloadComplete={handleReloadComplete}
         />
-        <PointerLockControls enabled={!showGameOver} />
+        <PointerLockControls
+          ref={pointerLockControlsRef}
+          enabled={!gameOver}
+        />
       </Canvas>
 
       {slashFlash > 0 && (
